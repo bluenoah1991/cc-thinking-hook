@@ -151,7 +151,7 @@ def main():
     args = parser.parse_args()
 
     backend_url = get_backend_url()
-    PORT = args.port
+    port = args.port
 
     try:
         with open("ultrathink.txt", "r", encoding="utf-8") as f:
@@ -170,13 +170,13 @@ def main():
 
     handler_class = make_handler(backend_url, ultrathink_prompt, args.diagnostic)
 
-    with socketserver.TCPServer(("", PORT), handler_class) as httpd:
+    with socketserver.TCPServer(("", port), handler_class) as httpd:
         print("\n🚀 Claude UltraThink Proxy")
-        print(f"   Local:   http://localhost:{PORT}")
+        print(f"   Local:   http://localhost:{port}")
         print(f"   Backend: {backend_url}")
         if args.diagnostic:
             print(f"   📋 Diagnostic: enabled (saving to 'diagnostic/' directory)")
-        print(f"\n   export ANTHROPIC_BASE_URL=http://localhost:{PORT}")
+        print(f"\n   export ANTHROPIC_BASE_URL=http://localhost:{port}")
         print("\n   Press Ctrl+C to stop\n")
 
         try:
