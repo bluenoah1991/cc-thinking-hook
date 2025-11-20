@@ -20,6 +20,16 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             return
 
         content = last_msg.get("content")
+
+        if isinstance(content, list):
+            has_non_text_blocks = False
+            for block in content:
+                if isinstance(block, dict) and block.get("type") != "text":
+                    has_non_text_blocks = True
+                    break
+            if has_non_text_blocks:
+                return
+
         ultrathink = {"type": "text", "text": self.ultrathink_prompt}
 
         if isinstance(content, str):
