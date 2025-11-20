@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
-import json
+import argparse
+import datetime
 import http.server
+import json
+import os
 import socketserver
-import urllib.request
 import ssl
-import certifi
+import urllib.request
 from urllib.request import Request
+
+import certifi
 
 
 class ProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -14,6 +18,27 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         if len(args) >= 2 and isinstance(args[1], int) and args[1] >= 400:
             print(f"[✗] HTTP {args[1]}")
+
+    def _save_diagnostic_request(self, data):
+        if not hasattr(self, "diagnostic_mode") or not self.diagnostic_mode:
+            return
+
+        try:
+            diag_dir = "diagnostic"
+            if not os.path.exists(diag_dir):
+                os.makedirs(diag_dir)
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            filename = f"request_{timestamp}.json"
+            filepath = os.path.join(diag_dir, filename)
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            print(f"[📋] Diagnostic saved: {filename}")
+
+        except Exception as e:
+            print(f"[✗] Failed to save diagnostic: {e}")
 
     def _inject_ultrathink(self, data):
         if "messages" not in data or not data["messages"]:
@@ -40,10 +65,12 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         ultrathink = {"type": "text", "text": self.ultrathink_prompt}
 
+        injected = False
         if isinstance(content, str):
             last_msg["content"] = [{"type": "text", "text": content}, ultrathink]
             preview = content[:20] + "..." if len(content) > 20 else content
             print(f"[✓] Injected prompt: {preview}")
+            injected = True
         elif isinstance(content, list):
             content.append(ultrathink)
             text_blocks = [
@@ -54,6 +81,10 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             first_text = text_blocks[0] if text_blocks else ""
             preview = first_text[:20] + "..." if len(first_text) > 20 else first_text
             print(f"[✓] Injected prompt: {preview}")
+            injected = True
+
+        if injected:
+            self._save_diagnostic_request(data)
 
     def do_POST(self):
         try:
@@ -73,13 +104,14 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             ctx = ssl.create_default_context(cafile=certifi.where())
             with urllib.request.urlopen(req, context=ctx) as resp:
                 self.send_response(resp.status)
-                [
-                    self.send_header(h, v)
-                    for h, v in resp.headers.items()
-                    if h.lower() not in ["connection", "transfer-encoding"]
-                ]
+
+                for h, v in resp.headers.items():
+                    if h.lower() not in ["connection", "transfer-encoding"]:
+                        self.send_header(h, v)
+
                 self.end_headers()
                 self.wfile.write(resp.read())
+
         except Exception as e:
             self.send_response(500)
             self.send_header("Content-type", "application/json")
@@ -98,8 +130,25 @@ def get_backend_url():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Claude UltraThink Proxy")
+    parser.add_argument(
+        "--diagnostic",
+        "-d",
+        action="store_true",
+        help="Enable diagnostic mode to save request bodies",
+    )
+    parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=5280,
+        help="Port to run the proxy on (default: 5280)",
+    )
+
+    args = parser.parse_args()
+
     backend_url = get_backend_url()
-    PORT = 5280
+    PORT = args.port
 
     try:
         with open("ultrathink.txt", "r", encoding="utf-8") as f:
@@ -108,21 +157,25 @@ def main():
         print("[✗] Could not load ultrathink.txt")
         ultrathink_prompt = ""
 
-    def make_handler(url, prompt):
+    def make_handler(url, prompt, diagnostic):
         class CustomProxyHandler(ProxyHandler):
             backend_url = url
             ultrathink_prompt = prompt
+            diagnostic_mode = diagnostic
 
         return CustomProxyHandler
 
-    handler_class = make_handler(backend_url, ultrathink_prompt)
+    handler_class = make_handler(backend_url, ultrathink_prompt, args.diagnostic)
 
     with socketserver.TCPServer(("", PORT), handler_class) as httpd:
         print("\n🚀 Claude UltraThink Proxy")
         print(f"   Local:   http://localhost:{PORT}")
         print(f"   Backend: {backend_url}")
+        if args.diagnostic:
+            print(f"   📋 Diagnostic: enabled (saving to 'diagnostic/' directory)")
         print(f"\n   export ANTHROPIC_BASE_URL=http://localhost:{PORT}")
         print("\n   Press Ctrl+C to stop\n")
+
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
