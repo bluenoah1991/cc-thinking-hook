@@ -4,15 +4,16 @@ import json
 import http.server
 import socketserver
 import urllib.request
-import os
+import ssl
+import certifi
 from urllib.request import Request
 
 
 class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
-        if "200" in format % args:
-            print(format % args)
+        if len(args) >= 2 and isinstance(args[1], int) and args[1] >= 400:
+            print(f"[✗] HTTP {args[1]}")
 
     def _inject_ultrathink(self, data):
         if "messages" not in data or not data["messages"]:
@@ -41,8 +42,18 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         if isinstance(content, str):
             last_msg["content"] = [{"type": "text", "text": content}, ultrathink]
+            preview = content[:20] + "..." if len(content) > 20 else content
+            print(f"[✓] Injected prompt: {preview}")
         elif isinstance(content, list):
             content.append(ultrathink)
+            text_blocks = [
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            ]
+            first_text = text_blocks[0] if text_blocks else ""
+            preview = first_text[:20] + "..." if len(first_text) > 20 else first_text
+            print(f"[✓] Injected prompt: {preview}")
 
     def do_POST(self):
         try:
@@ -59,7 +70,8 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
                     req.add_header(h, v)
             req.add_header("Content-Length", str(len(modified)))
 
-            with urllib.request.urlopen(req) as resp:
+            ctx = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(req, context=ctx) as resp:
                 self.send_response(resp.status)
                 [
                     self.send_header(h, v)
@@ -68,8 +80,12 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
                 ]
                 self.end_headers()
                 self.wfile.write(resp.read())
-        except:
-            print("Proxy error")
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            error_response = {"error": str(e)}
+            self.wfile.write(json.dumps(error_response).encode())
 
 
 def get_backend_url():
@@ -78,7 +94,7 @@ def get_backend_url():
         if url:
             return url.rstrip("/")
 
-        print("Error: Backend URL cannot be empty.")
+        print("[✗] Backend URL cannot be empty.")
 
 
 def main():
@@ -89,7 +105,7 @@ def main():
         with open("ultrathink.txt", "r", encoding="utf-8") as f:
             ultrathink_prompt = f.read()
     except:
-        print("Warning: Could not load ultrathink.txt")
+        print("[✗] Could not load ultrathink.txt")
         ultrathink_prompt = ""
 
     def make_handler(url, prompt):
@@ -102,20 +118,15 @@ def main():
     handler_class = make_handler(backend_url, ultrathink_prompt)
 
     with socketserver.TCPServer(("", PORT), handler_class) as httpd:
-        print()
-        print("=== Claude UltraThink Proxy Started ===")
-        print()
-        print(f"Proxy: http://localhost:{PORT}")
-        print(f"Backend: {backend_url}")
-        print()
-        print(f"export ANTHROPIC_BASE_URL=http://localhost:{PORT}")
-        print()
-        print("Press Ctrl+C to stop")
-        print()
+        print("\n🚀 Claude UltraThink Proxy")
+        print(f"   Local:   http://localhost:{PORT}")
+        print(f"   Backend: {backend_url}")
+        print(f"\n   export ANTHROPIC_BASE_URL=http://localhost:{PORT}")
+        print("\n   Press Ctrl+C to stop\n")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nShutting down...")
+            print("\n👋 Shutting down...")
 
 
 if __name__ == "__main__":
