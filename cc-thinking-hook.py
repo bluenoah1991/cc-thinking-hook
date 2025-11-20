@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-import json, http.server, socketserver, urllib.request, os
+
+import json
+import http.server
+import socketserver
+import urllib.request
+import os
 from urllib.request import Request
 
 
@@ -12,6 +17,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
     def _inject_ultrathink(self, data):
         if "messages" not in data or not data["messages"]:
             return
+
         last_msg = data["messages"][-1]
         if last_msg.get("role") != "user":
             return
@@ -27,6 +33,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
                 if isinstance(block, dict) and block.get("type") != "text":
                     has_non_text_blocks = True
                     break
+
             if has_non_text_blocks:
                 return
 
@@ -42,6 +49,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             data = json.loads(
                 self.rfile.read(int(self.headers["Content-Length"])).decode("utf-8")
             )
+
             self._inject_ultrathink(data)
             modified = json.dumps(data).encode("utf-8")
 
@@ -69,6 +77,7 @@ def get_backend_url():
         url = input("Backend API URL: ").strip()
         if url:
             return url.rstrip("/")
+
         print("Error: Backend URL cannot be empty.")
 
 
