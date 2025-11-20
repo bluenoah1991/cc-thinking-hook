@@ -44,6 +44,9 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
         if "messages" not in data or not data["messages"]:
             return
 
+        if "thinking" not in data:
+            return
+
         last_msg = data["messages"][-1]
         if last_msg.get("role") != "user":
             return
