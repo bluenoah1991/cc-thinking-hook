@@ -1,0 +1,9 @@
+{
+  "name": "cc-thinking-hook",
+  "scripts": {
+    "build:windows": "go mod tidy && go build -o cc-thinking-hook.exe main.go",
+    "build:unix": "go mod tidy && go build -o cc-thinking-hook main.go",
+    "start": "go run main.go",
+    "start:py": "python3 cc-thinking-hook.py"
+  }
+}
