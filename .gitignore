@@ -13,5 +13,5 @@ diagnostic/
 # Go build output
 cc-thinking-hook
 cc-thinking-hook.exe
-cc-ification-hook
+cc-ification-hook-bin
 cc-ification-hook.exe
