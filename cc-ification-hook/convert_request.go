@@ -242,7 +242,8 @@ func convertAssistantMessage(msg AnthropicMessage) ([]OpenAIMessage, error) {
 
 	var finalContent string
 	if len(thinkingParts) > 0 {
-		finalContent = strings.Join(thinkingParts, "\n")
+		thinkingContent := strings.Join(thinkingParts, "\n")
+		finalContent = "```thinking\n" + thinkingContent + "\n```"
 	}
 	if len(textParts) > 0 {
 		textContent := strings.Join(textParts, " ")
