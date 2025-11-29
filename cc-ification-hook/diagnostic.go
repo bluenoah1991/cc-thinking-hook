@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -51,4 +52,55 @@ func saveDiagnosticRequest(anthropicBody []byte, openaiReq *OpenAIRequest) {
 	} else {
 		fmt.Printf("[📋] Saved openai request: %s\n", openaiFile)
 	}
+}
+
+type StreamRecorder struct {
+	file      *os.File
+	mu        sync.Mutex
+	timestamp string
+}
+
+func newStreamRecorder() *StreamRecorder {
+	if !diagnosticMode {
+		return nil
+	}
+
+	if err := os.MkdirAll("diagnostic", 0755); err != nil {
+		fmt.Printf("[✗] Failed to create diagnostic directory: %v\n", err)
+		return nil
+	}
+
+	timestamp := time.Now().Format("20060102_150405_000")
+	filename := filepath.Join("diagnostic", fmt.Sprintf("stream_%s.txt", timestamp))
+
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("[✗] Failed to create stream file: %v\n", err)
+		return nil
+	}
+
+	fmt.Printf("[📋] Recording stream to: %s\n", filename)
+	return &StreamRecorder{
+		file:      file,
+		timestamp: timestamp,
+	}
+}
+
+func (r *StreamRecorder) RecordChunk(line string) {
+	if r == nil || r.file == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.file.WriteString(line + "\n")
+}
+
+func (r *StreamRecorder) Close() {
+	if r == nil || r.file == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.file.Close()
+	fmt.Printf("[📋] Stream recording completed: %s\n", r.timestamp)
 }

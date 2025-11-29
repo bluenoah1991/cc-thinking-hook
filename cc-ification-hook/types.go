@@ -54,22 +54,6 @@ type AnthropicRequest struct {
 	Thinking      *AnthropicThinking   `json:"thinking,omitempty"`
 }
 
-type AnthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-}
-
-type AnthropicResponse struct {
-	ID           string                  `json:"id"`
-	Type         string                  `json:"type"`
-	Role         string                  `json:"role"`
-	Model        string                  `json:"model"`
-	Content      []AnthropicContentBlock `json:"content"`
-	StopReason   string                  `json:"stop_reason,omitempty"`
-	StopSequence *string                 `json:"stop_sequence"`
-	Usage        AnthropicUsage          `json:"usage"`
-}
-
 type ImageURL struct {
 	URL string `json:"url"`
 }
@@ -135,15 +119,6 @@ type ReasoningDetail struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-type OpenAIMessageContent struct {
-	Role             string            `json:"role"`
-	Content          string            `json:"content"`
-	ToolCalls        []OpenAIToolCall  `json:"tool_calls,omitempty"`
-	Reasoning        string            `json:"reasoning,omitempty"`
-	ReasoningContent string            `json:"reasoning_content,omitempty"`
-	ReasoningDetails []ReasoningDetail `json:"reasoning_details,omitempty"`
-}
-
 type OpenAIDelta struct {
 	Role             string            `json:"role,omitempty"`
 	Content          string            `json:"content,omitempty"`
@@ -154,10 +129,9 @@ type OpenAIDelta struct {
 }
 
 type OpenAIChoice struct {
-	Index        int                   `json:"index"`
-	Message      *OpenAIMessageContent `json:"message,omitempty"`
-	Delta        *OpenAIDelta          `json:"delta,omitempty"`
-	FinishReason string                `json:"finish_reason,omitempty"`
+	Index        int          `json:"index"`
+	Delta        *OpenAIDelta `json:"delta,omitempty"`
+	FinishReason string       `json:"finish_reason,omitempty"`
 }
 
 type OpenAIUsage struct {

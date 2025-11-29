@@ -32,6 +32,13 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 		ToolCalls:       make(map[int]*ToolCallState),
 	}
 
+	recorder := newStreamRecorder()
+	defer func() {
+		if recorder != nil {
+			recorder.Close()
+		}
+	}()
+
 	sendEvent(w, "message_start", map[string]any{
 		"type": "message_start",
 		"message": map[string]any{
@@ -66,8 +73,11 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 			continue
 		}
 
+		recorder.RecordChunk(line)
+
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
+			recorder.RecordChunk("[DONE]")
 			break
 		}
 
