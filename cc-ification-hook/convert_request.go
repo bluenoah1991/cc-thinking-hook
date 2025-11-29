@@ -344,6 +344,17 @@ func extractToolResultContent(content any) string {
 	}
 }
 
+func contentPartsToAny(parts []OpenAIContentPart) any {
+	if len(parts) == 1 && parts[0].Type == "text" {
+		return parts[0].Text
+	}
+	result := make([]any, len(parts))
+	for i, p := range parts {
+		result[i] = p
+	}
+	return result
+}
+
 func shouldInjectUltrathink(req *AnthropicRequest) bool {
 	if ultrathinkPrompt == "" {
 		return false
@@ -365,17 +376,6 @@ func budgetToEffort(budgetTokens int) string {
 		return "high"
 	}
 	return "medium"
-}
-
-func contentPartsToAny(parts []OpenAIContentPart) any {
-	if len(parts) == 1 && parts[0].Type == "text" {
-		return parts[0].Text
-	}
-	result := make([]any, len(parts))
-	for i, p := range parts {
-		result[i] = p
-	}
-	return result
 }
 
 func printInjectionLog(userContent string) {

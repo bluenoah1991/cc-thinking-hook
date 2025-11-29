@@ -1,117 +1,315 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
-func handleNonStreamingResponse(w http.ResponseWriter, resp *http.Response, originalModel string) {
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		writeError(w, err)
+func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, originalModel string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	var openaiResp OpenAIResponse
-	if err := json.Unmarshal(body, &openaiResp); err != nil {
-		writeError(w, err)
-		return
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	state := &StreamState{
+		MessageID:       fmt.Sprintf("msg_%d", time.Now().UnixNano()),
+		Model:           originalModel,
+		CurrentIndex:    0,
+		TextStarted:     false,
+		TextIndex:       -1,
+		ThinkingStarted: false,
+		ThinkingIndex:   -1,
+		ToolCalls:       make(map[int]*ToolCallState),
 	}
 
-	anthropicResp := convertOpenAIToAnthropic(&openaiResp, originalModel)
+	sendEvent(w, "message_start", map[string]any{
+		"type": "message_start",
+		"message": map[string]any{
+			"id":            state.MessageID,
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []any{},
+			"model":         state.Model,
+			"stop_reason":   nil,
+			"stop_sequence": nil,
+			"usage": map[string]any{
+				"input_tokens":  100,
+				"output_tokens": 1,
+			},
+		},
+	})
+	flusher.Flush()
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	json.NewEncoder(w).Encode(anthropicResp)
-}
+	reader := bufio.NewReader(resp.Body)
 
-func convertOpenAIToAnthropic(openaiResp *OpenAIResponse, originalModel string) *AnthropicResponse {
-	anthropicResp := &AnthropicResponse{
-		ID:           openaiResp.ID,
-		Type:         "message",
-		Role:         "assistant",
-		Model:        originalModel,
-		StopSequence: nil,
-		Content:      []AnthropicContentBlock{},
-	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("[✗] Stream read error: %v\n", err)
+			}
+			break
+		}
 
-	if len(openaiResp.Choices) > 0 {
-		choice := openaiResp.Choices[0]
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "data: ") {
+			continue
+		}
 
-		if choice.Message != nil {
-			anthropicResp.Content = convertOpenAIMessageToBlocks(choice.Message)
-			anthropicResp.StopReason = convertFinishReason(choice.FinishReason)
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk OpenAIResponse
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+
+		if chunk.Usage != nil {
+			state.AccumulatedUsage = chunk.Usage
+		}
+
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+
+		choice := chunk.Choices[0]
+
+		if choice.Delta != nil {
+			processStreamDelta(w, flusher, state, choice.Delta)
+		}
+
+		if choice.FinishReason == "tool_calls" {
+			for _, tc := range state.ToolCalls {
+				if tc.Started && !tc.Closed {
+					sendEvent(w, "content_block_stop", map[string]any{
+						"type":  "content_block_stop",
+						"index": tc.BlockIndex,
+					})
+					tc.Closed = true
+				}
+			}
+			flusher.Flush()
+		}
+
+		if choice.FinishReason != "" {
+			finalizeStream(w, flusher, state, choice.FinishReason)
+			state.Finalized = true
+			break
 		}
 	}
 
-	if openaiResp.Usage != nil {
-		anthropicResp.Usage = AnthropicUsage{
-			InputTokens:  openaiResp.Usage.PromptTokens,
-			OutputTokens: openaiResp.Usage.CompletionTokens,
-		}
+	if !state.Finalized {
+		finalizeStream(w, flusher, state, "end_turn")
 	}
-
-	return anthropicResp
 }
 
-func convertOpenAIMessageToBlocks(msg *OpenAIMessageContent) []AnthropicContentBlock {
-	var blocks []AnthropicContentBlock
-
-	reasoning := extractReasoning(msg)
+func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, delta *OpenAIDelta) {
+	reasoning := extractStreamReasoning(delta)
 	if reasoning != "" {
-		blocks = append(blocks, AnthropicContentBlock{
-			Type:     "thinking",
-			Thinking: reasoning,
+		if !state.ThinkingStarted {
+			state.ThinkingIndex = state.CurrentIndex
+			state.CurrentIndex++
+			sendEvent(w, "content_block_start", map[string]any{
+				"type":  "content_block_start",
+				"index": state.ThinkingIndex,
+				"content_block": map[string]any{
+					"type":     "thinking",
+					"thinking": "",
+				},
+			})
+			state.ThinkingStarted = true
+		}
+		sendEvent(w, "content_block_delta", map[string]any{
+			"type":  "content_block_delta",
+			"index": state.ThinkingIndex,
+			"delta": map[string]any{
+				"type":     "thinking_delta",
+				"thinking": reasoning,
+			},
 		})
+		flusher.Flush()
 	}
 
-	if msg.Content != "" {
-		blocks = append(blocks, AnthropicContentBlock{
-			Type: "text",
-			Text: msg.Content,
-		})
-	}
-
-	for _, tc := range msg.ToolCalls {
-		var input any
-		if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
-			input = map[string]any{}
+	if delta.Content != "" {
+		if state.ThinkingStarted && state.ThinkingIndex >= 0 {
+			sendEvent(w, "content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": state.ThinkingIndex,
+			})
+			state.ThinkingStarted = false
 		}
 
-		blocks = append(blocks, AnthropicContentBlock{
-			Type:  "tool_use",
-			ID:    tc.ID,
-			Name:  tc.Function.Name,
-			Input: input,
+		if !state.TextStarted {
+			state.TextIndex = state.CurrentIndex
+			state.CurrentIndex++
+			sendEvent(w, "content_block_start", map[string]any{
+				"type":  "content_block_start",
+				"index": state.TextIndex,
+				"content_block": map[string]any{
+					"type": "text",
+					"text": "",
+				},
+			})
+			state.TextStarted = true
+		}
+		sendEvent(w, "content_block_delta", map[string]any{
+			"type":  "content_block_delta",
+			"index": state.TextIndex,
+			"delta": map[string]any{
+				"type": "text_delta",
+				"text": delta.Content,
+			},
 		})
+		flusher.Flush()
 	}
 
-	return blocks
-}
+	if len(delta.ToolCalls) > 0 {
+		for _, tc := range delta.ToolCalls {
+			idx := tc.Index
+			toolState := state.ToolCalls[idx]
 
-func extractReasoning(msg *OpenAIMessageContent) string {
-	var result string
-	if msg.Reasoning != "" {
-		result = msg.Reasoning
-	} else if msg.ReasoningContent != "" {
-		result = msg.ReasoningContent
-	} else if len(msg.ReasoningDetails) > 0 {
-		var parts []string
-		for _, detail := range msg.ReasoningDetails {
-			if detail.Content != "" {
-				parts = append(parts, detail.Content)
-			} else if detail.Summary != "" {
-				parts = append(parts, detail.Summary)
+			if tc.Function.Name != "" {
+				if toolState == nil {
+					if state.ThinkingStarted {
+						sendEvent(w, "content_block_stop", map[string]any{
+							"type":  "content_block_stop",
+							"index": state.ThinkingIndex,
+						})
+						state.ThinkingStarted = false
+					}
+
+					if state.TextStarted {
+						sendEvent(w, "content_block_stop", map[string]any{
+							"type":  "content_block_stop",
+							"index": state.TextIndex,
+						})
+						state.TextStarted = false
+					}
+
+					toolState = &ToolCallState{
+						ID:         tc.ID,
+						Name:       tc.Function.Name,
+						BlockIndex: state.CurrentIndex,
+						Started:    false,
+						Closed:     false,
+					}
+					state.ToolCalls[idx] = toolState
+					state.CurrentIndex++
+				}
+
+				if !toolState.Started {
+					sendEvent(w, "content_block_start", map[string]any{
+						"type":  "content_block_start",
+						"index": toolState.BlockIndex,
+						"content_block": map[string]any{
+							"type": "tool_use",
+							"id":   toolState.ID,
+							"name": toolState.Name,
+						},
+					})
+					toolState.Started = true
+				}
+			}
+
+			if tc.Function.Arguments != "" && toolState != nil {
+				sendEvent(w, "content_block_delta", map[string]any{
+					"type":  "content_block_delta",
+					"index": toolState.BlockIndex,
+					"delta": map[string]any{
+						"type":         "input_json_delta",
+						"partial_json": tc.Function.Arguments,
+					},
+				})
 			}
 		}
-		result = strings.Join(parts, "\n")
+		flusher.Flush()
+	}
+}
+
+func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamState, reason string) {
+	if state.ThinkingStarted {
+		sendEvent(w, "content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": state.ThinkingIndex,
+		})
+	}
+
+	if state.TextStarted {
+		sendEvent(w, "content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": state.TextIndex,
+		})
+	}
+
+	for _, tc := range state.ToolCalls {
+		if tc.Started && !tc.Closed {
+			sendEvent(w, "content_block_stop", map[string]any{
+				"type":  "content_block_stop",
+				"index": tc.BlockIndex,
+			})
+			tc.Closed = true
+		}
+	}
+
+	outputTokens := 0
+	if state.AccumulatedUsage != nil {
+		outputTokens = state.AccumulatedUsage.CompletionTokens
+	}
+
+	sendEvent(w, "message_delta", map[string]any{
+		"type": "message_delta",
+		"delta": map[string]any{
+			"stop_reason":   convertFinishReason(reason),
+			"stop_sequence": nil,
+		},
+		"usage": map[string]any{
+			"output_tokens": outputTokens,
+		},
+	})
+
+	sendEvent(w, "message_stop", map[string]any{
+		"type": "message_stop",
+	})
+
+	flusher.Flush()
+}
+
+func extractStreamReasoning(delta *OpenAIDelta) string {
+	var result string
+	if delta.Reasoning != "" {
+		result = delta.Reasoning
+	} else if delta.ReasoningContent != "" {
+		result = delta.ReasoningContent
+	} else if len(delta.ReasoningDetails) > 0 {
+		var parts []string
+		for _, detail := range delta.ReasoningDetails {
+			if detail.Content != "" {
+				parts = append(parts, detail.Content)
+			}
+		}
+		result = strings.Join(parts, "")
 	}
 	if strings.TrimSpace(result) == "" {
 		return ""
 	}
 	return result
+}
+
+func sendEvent(w http.ResponseWriter, event string, data any) {
+	jsonData, _ := json.Marshal(data)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, jsonData)
 }
 
 func convertFinishReason(reason string) string {

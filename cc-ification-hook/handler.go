@@ -71,12 +71,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "text/event-stream") || anthropicReq.Stream {
-		handleStreamingResponse(w, resp, originalModel)
-	} else {
-		handleNonStreamingResponse(w, resp, originalModel)
-	}
+	handleStreamingResponse(w, resp, originalModel)
 }
 
 func resolveAPIKey(r *http.Request) string {

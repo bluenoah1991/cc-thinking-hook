@@ -10,9 +10,9 @@ import (
 )
 
 var (
+	backendURL       string
 	backendAPIKey    string
 	backendModel     string
-	backendURL       string
 	diagnosticMode   bool
 	ultrathinkPrompt string
 )
