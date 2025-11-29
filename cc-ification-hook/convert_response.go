@@ -62,8 +62,8 @@ func convertOpenAIMessageToBlocks(msg *OpenAIMessageContent) []AnthropicContentB
 	reasoning := extractReasoning(msg)
 	if reasoning != "" {
 		blocks = append(blocks, AnthropicContentBlock{
-			Type: "thinking",
-			Text: reasoning,
+			Type:     "thinking",
+			Thinking: reasoning,
 		})
 	}
 
@@ -76,7 +76,9 @@ func convertOpenAIMessageToBlocks(msg *OpenAIMessageContent) []AnthropicContentB
 
 	for _, tc := range msg.ToolCalls {
 		var input any
-		json.Unmarshal([]byte(tc.Function.Arguments), &input)
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
+			input = map[string]any{}
+		}
 
 		blocks = append(blocks, AnthropicContentBlock{
 			Type:  "tool_use",

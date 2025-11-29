@@ -182,6 +182,14 @@ func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *Stre
 
 			if tc.Function.Name != "" {
 				if toolState == nil {
+					if state.ThinkingStarted {
+						sendEvent(w, "content_block_stop", map[string]any{
+							"type":  "content_block_stop",
+							"index": state.ThinkingIndex,
+						})
+						state.ThinkingStarted = false
+					}
+
 					if state.TextStarted {
 						sendEvent(w, "content_block_stop", map[string]any{
 							"type":  "content_block_stop",
