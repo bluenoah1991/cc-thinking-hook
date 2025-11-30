@@ -74,6 +74,79 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	handleStreamingResponse(w, resp, originalModel)
 }
 
+func countTokensHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if anthropicURL != "" {
+		proxyCountTokens(w, body)
+		return
+	}
+
+	textLength := len(body)
+	estimatedTokens := (textLength + 3) / 4
+
+	response := CountTokensResponse{
+		InputTokens: estimatedTokens,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func proxyCountTokens(w http.ResponseWriter, body []byte) {
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	req["model"] = anthropicModel
+
+	newBody, err := json.Marshal(req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	proxyReq, err := http.NewRequest(http.MethodPost, anthropicURL+"/v1/messages/count_tokens", bytes.NewReader(newBody))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	proxyReq.Header.Set("Content-Type", "application/json")
+	proxyReq.Header.Set("x-api-key", anthropicAPIKey)
+	proxyReq.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(respBody)
+}
+
 func resolveAPIKey(r *http.Request) string {
 	if backendAPIKey != "" {
 		return backendAPIKey
@@ -96,28 +169,4 @@ func writeError(w http.ResponseWriter, err error) {
 			"message": err.Error(),
 		},
 	})
-}
-
-func countTokensHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	textLength := len(body)
-	estimatedTokens := (textLength + 3) / 4
-
-	response := CountTokensResponse{
-		InputTokens: estimatedTokens,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
 }

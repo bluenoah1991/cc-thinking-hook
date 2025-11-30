@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -15,6 +16,9 @@ var (
 	backendModel     string
 	diagnosticMode   bool
 	ultrathinkPrompt string
+	anthropicURL     string
+	anthropicAPIKey  string
+	anthropicModel   string
 )
 
 func main() {
@@ -27,6 +31,7 @@ func main() {
 	diagnosticMode = *diagnostic
 
 	loadUltrathinkPrompt()
+	loadAnthropicConfig()
 
 	backendURL = getInput("Backend OpenAI API URL: ", true)
 	backendURL = strings.TrimRight(backendURL, "/")
@@ -42,6 +47,11 @@ func main() {
 	}
 	if ultrathinkPrompt != "" {
 		fmt.Println("   🧠 UltraThink: enabled")
+	}
+	if anthropicURL != "" {
+		fmt.Println("   📊 TokenCount: proxy")
+	} else {
+		fmt.Println("   📊 TokenCount: estimate")
 	}
 	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", *port)
 	fmt.Println("\n   Press Ctrl+C to stop")
@@ -65,6 +75,27 @@ func loadUltrathinkPrompt() {
 	if prompt != "" {
 		ultrathinkPrompt = prompt
 		fmt.Println("[✓] Loaded ultrathink.txt")
+	}
+}
+
+func loadAnthropicConfig() {
+	data, err := os.ReadFile("anthropic.json")
+	if err != nil {
+		return
+	}
+	var config struct {
+		URL    string `json:"url"`
+		APIKey string `json:"api_key"`
+		Model  string `json:"model"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return
+	}
+	if config.URL != "" && config.APIKey != "" && config.Model != "" {
+		anthropicURL = strings.TrimRight(config.URL, "/")
+		anthropicAPIKey = config.APIKey
+		anthropicModel = config.Model
+		fmt.Println("[✓] Loaded anthropic.json")
 	}
 }
 
