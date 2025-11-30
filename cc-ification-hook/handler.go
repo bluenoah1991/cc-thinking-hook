@@ -97,3 +97,27 @@ func writeError(w http.ResponseWriter, err error) {
 		},
 	})
 }
+
+func countTokensHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	textLength := len(body)
+	estimatedTokens := (textLength + 3) / 4
+
+	response := CountTokensResponse{
+		InputTokens: estimatedTokens,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}

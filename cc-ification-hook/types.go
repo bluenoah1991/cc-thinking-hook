@@ -151,3 +151,7 @@ type ToolCallState struct {
 	Started    bool
 	Closed     bool
 }
+
+type CountTokensResponse struct {
+	InputTokens int `json:"input_tokens"`
+}

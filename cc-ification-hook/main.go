@@ -49,6 +49,7 @@ func main() {
 
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/v1/messages", proxyHandler)
+	http.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
 		fmt.Printf("Server error: %v\n", err)
