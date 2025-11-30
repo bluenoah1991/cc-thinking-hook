@@ -292,6 +292,10 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 		outputTokens = int(float64(state.AccumulatedUsage.TotalTokens) * tokenScaleFactor)
 	}
 
+	if diagnosticMode {
+		fmt.Printf("[✓] Output tokens: %d (scale: %.2f)\n", outputTokens, tokenScaleFactor)
+	}
+
 	sendEvent(w, "message_delta", map[string]any{
 		"type": "message_delta",
 		"delta": map[string]any{
