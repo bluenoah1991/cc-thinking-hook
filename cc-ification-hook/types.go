@@ -1,23 +1,5 @@
 package main
 
-type ImageSource struct {
-	Type      string `json:"type"`
-	MediaType string `json:"media_type"`
-	Data      string `json:"data"`
-}
-
-type AnthropicContentBlock struct {
-	Type      string       `json:"type"`
-	Text      string       `json:"text,omitempty"`
-	Thinking  string       `json:"thinking,omitempty"`
-	ID        string       `json:"id,omitempty"`
-	Name      string       `json:"name,omitempty"`
-	Input     any          `json:"input,omitempty"`
-	ToolUseID string       `json:"tool_use_id,omitempty"`
-	Content   any          `json:"content,omitempty"`
-	Source    *ImageSource `json:"source,omitempty"`
-}
-
 type AnthropicMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`

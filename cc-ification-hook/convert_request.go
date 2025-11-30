@@ -240,29 +240,18 @@ func convertAssistantMessage(msg AnthropicMessage) ([]OpenAIMessage, error) {
 
 	assistantMsg := OpenAIMessage{Role: "assistant"}
 
-	var finalContent string
 	if len(thinkingParts) > 0 {
-		thinkingContent := strings.Join(thinkingParts, "\n")
-		finalContent = "```thinking\n" + thinkingContent + "\n```"
+		assistantMsg.ReasoningContent = strings.Join(thinkingParts, "\n")
 	}
 	if len(textParts) > 0 {
-		textContent := strings.Join(textParts, " ")
-		if finalContent != "" {
-			finalContent = finalContent + "\n\n" + textContent
-		} else {
-			finalContent = textContent
-		}
+		assistantMsg.Content = strings.Join(textParts, "\n")
 	}
-
-	if finalContent != "" {
-		assistantMsg.Content = finalContent
-	}
-
 	if len(toolCalls) > 0 {
 		assistantMsg.ToolCalls = toolCalls
 	}
 
-	if assistantMsg.Content != nil || len(assistantMsg.ToolCalls) > 0 {
+	contentStr, _ := assistantMsg.Content.(string)
+	if contentStr != "" || assistantMsg.ReasoningContent != "" || len(assistantMsg.ToolCalls) > 0 {
 		messages = append(messages, assistantMsg)
 	}
 
