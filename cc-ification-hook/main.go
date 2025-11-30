@@ -19,6 +19,7 @@ var (
 	anthropicURL     string
 	anthropicAPIKey  string
 	anthropicModel   string
+	tokenScaleFactor float64
 )
 
 func main() {
@@ -32,9 +33,12 @@ func main() {
 	flag.StringVar(keyFlag, "k", "", "Backend API Key (optional)")
 	modelFlag := flag.String("model", "", "Backend Model (optional)")
 	flag.StringVar(modelFlag, "m", "", "Backend Model (optional)")
+	scaleFlag := flag.Float64("scale", 1.0, "Token scale factor")
+	flag.Float64Var(scaleFlag, "s", 1.0, "Token scale factor")
 	flag.Parse()
 
 	diagnosticMode = *diagnostic
+	tokenScaleFactor = *scaleFlag
 
 	loadUltrathinkPrompt()
 	loadAnthropicConfig()

@@ -289,7 +289,7 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 
 	outputTokens := 0
 	if state.AccumulatedUsage != nil {
-		outputTokens = state.AccumulatedUsage.TotalTokens
+		outputTokens = int(float64(state.AccumulatedUsage.TotalTokens) * tokenScaleFactor)
 	}
 
 	sendEvent(w, "message_delta", map[string]any{
