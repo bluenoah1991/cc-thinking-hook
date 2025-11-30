@@ -15,3 +15,6 @@ cc-thinking-hook
 cc-thinking-hook.exe
 cc-ification-hook-bin
 cc-ification-hook.exe
+
+# Config files with sensitive data
+anthropic.json
