@@ -128,61 +128,11 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, delta *OpenAIDelta) {
 	reasoning := extractStreamReasoning(delta)
 	if reasoning != "" {
-		if !state.ThinkingStarted {
-			state.ThinkingIndex = state.CurrentIndex
-			state.CurrentIndex++
-			sendEvent(w, "content_block_start", map[string]any{
-				"type":  "content_block_start",
-				"index": state.ThinkingIndex,
-				"content_block": map[string]any{
-					"type":     "thinking",
-					"thinking": "",
-				},
-			})
-			state.ThinkingStarted = true
-		}
-		sendEvent(w, "content_block_delta", map[string]any{
-			"type":  "content_block_delta",
-			"index": state.ThinkingIndex,
-			"delta": map[string]any{
-				"type":     "thinking_delta",
-				"thinking": reasoning,
-			},
-		})
-		flusher.Flush()
+		handleThinkingDelta(w, flusher, state, reasoning)
 	}
 
 	if delta.Content != "" {
-		if state.ThinkingStarted && state.ThinkingIndex >= 0 {
-			sendEvent(w, "content_block_stop", map[string]any{
-				"type":  "content_block_stop",
-				"index": state.ThinkingIndex,
-			})
-			state.ThinkingStarted = false
-		}
-
-		if !state.TextStarted {
-			state.TextIndex = state.CurrentIndex
-			state.CurrentIndex++
-			sendEvent(w, "content_block_start", map[string]any{
-				"type":  "content_block_start",
-				"index": state.TextIndex,
-				"content_block": map[string]any{
-					"type": "text",
-					"text": "",
-				},
-			})
-			state.TextStarted = true
-		}
-		sendEvent(w, "content_block_delta", map[string]any{
-			"type":  "content_block_delta",
-			"index": state.TextIndex,
-			"delta": map[string]any{
-				"type": "text_delta",
-				"text": delta.Content,
-			},
-		})
-		flusher.Flush()
+		handleTextDelta(w, flusher, state, delta.Content)
 	}
 
 	if len(delta.ToolCalls) > 0 {
@@ -248,6 +198,70 @@ func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *Stre
 	}
 }
 
+func handleThinkingDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, reasoning string) {
+	if !state.ThinkingStarted {
+		if reasoning == "\n" {
+			return
+		}
+		state.ThinkingIndex = state.CurrentIndex
+		state.CurrentIndex++
+		sendEvent(w, "content_block_start", map[string]any{
+			"type":  "content_block_start",
+			"index": state.ThinkingIndex,
+			"content_block": map[string]any{
+				"type":     "thinking",
+				"thinking": "",
+			},
+		})
+		state.ThinkingStarted = true
+	}
+	sendEvent(w, "content_block_delta", map[string]any{
+		"type":  "content_block_delta",
+		"index": state.ThinkingIndex,
+		"delta": map[string]any{
+			"type":     "thinking_delta",
+			"thinking": reasoning,
+		},
+	})
+	flusher.Flush()
+}
+
+func handleTextDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, content string) {
+	if state.ThinkingStarted && state.ThinkingIndex >= 0 {
+		sendEvent(w, "content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": state.ThinkingIndex,
+		})
+		state.ThinkingStarted = false
+	}
+
+	if !state.TextStarted {
+		if content == "\n" {
+			return
+		}
+		state.TextIndex = state.CurrentIndex
+		state.CurrentIndex++
+		sendEvent(w, "content_block_start", map[string]any{
+			"type":  "content_block_start",
+			"index": state.TextIndex,
+			"content_block": map[string]any{
+				"type": "text",
+				"text": "",
+			},
+		})
+		state.TextStarted = true
+	}
+	sendEvent(w, "content_block_delta", map[string]any{
+		"type":  "content_block_delta",
+		"index": state.TextIndex,
+		"delta": map[string]any{
+			"type": "text_delta",
+			"text": content,
+		},
+	})
+	flusher.Flush()
+}
+
 func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamState, reason string) {
 	if state.ThinkingStarted {
 		sendEvent(w, "content_block_stop", map[string]any{
@@ -310,9 +324,6 @@ func extractStreamReasoning(delta *OpenAIDelta) string {
 			}
 		}
 		result = strings.Join(parts, "")
-	}
-	if strings.TrimSpace(result) == "" {
-		return ""
 	}
 	return result
 }
