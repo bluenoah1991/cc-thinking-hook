@@ -26,6 +26,12 @@ func main() {
 	flag.BoolVar(diagnostic, "d", false, "Enable diagnostic mode")
 	port := flag.Int("port", 5281, "Port to run the proxy on")
 	flag.IntVar(port, "p", 5281, "Port to run the proxy on")
+	urlFlag := flag.String("url", "", "Backend OpenAI API URL")
+	flag.StringVar(urlFlag, "u", "", "Backend OpenAI API URL")
+	keyFlag := flag.String("key", "", "Backend API Key (optional)")
+	flag.StringVar(keyFlag, "k", "", "Backend API Key (optional)")
+	modelFlag := flag.String("model", "", "Backend Model (optional)")
+	flag.StringVar(modelFlag, "m", "", "Backend Model (optional)")
 	flag.Parse()
 
 	diagnosticMode = *diagnostic
@@ -33,10 +39,22 @@ func main() {
 	loadUltrathinkPrompt()
 	loadAnthropicConfig()
 
-	backendURL = getInput("Backend OpenAI API URL: ", true)
-	backendURL = strings.TrimRight(backendURL, "/")
-	backendAPIKey = getInput("Backend API Key (optional, uses original if empty): ", false)
-	backendModel = getInput("Backend Model (optional, uses original if empty): ", false)
+	if *urlFlag != "" {
+		backendURL = strings.TrimRight(*urlFlag, "/")
+	} else {
+		backendURL = getInput("Backend OpenAI API URL: ", true)
+		backendURL = strings.TrimRight(backendURL, "/")
+	}
+	if *keyFlag != "" {
+		backendAPIKey = *keyFlag
+	} else if *urlFlag == "" {
+		backendAPIKey = getInput("Backend API Key (optional, uses original if empty): ", false)
+	}
+	if *modelFlag != "" {
+		backendModel = *modelFlag
+	} else if *urlFlag == "" {
+		backendModel = getInput("Backend Model (optional, uses original if empty): ", false)
+	}
 
 	fmt.Println()
 	fmt.Println("🚀 CC-ification Hook")

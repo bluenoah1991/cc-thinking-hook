@@ -200,10 +200,16 @@ func main() {
 	flag.BoolVar(diagnostic, "d", false, "Enable diagnostic mode")
 	port := flag.Int("port", 5280, "Port to run the proxy on")
 	flag.IntVar(port, "p", 5280, "Port to run the proxy on")
+	urlFlag := flag.String("url", "", "Backend API URL")
+	flag.StringVar(urlFlag, "u", "", "Backend API URL")
 	flag.Parse()
 
 	diagnosticMode = *diagnostic
-	backendURL = getBackendURL()
+	if *urlFlag != "" {
+		backendURL = strings.TrimRight(*urlFlag, "/")
+	} else {
+		backendURL = getBackendURL()
+	}
 
 	data, err := os.ReadFile("ultrathink.txt")
 	if err != nil {
