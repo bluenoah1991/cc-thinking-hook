@@ -81,7 +81,7 @@ func (z *ZhipuInterceptor) OnDeltaStart(delta *OpenAIDelta) {
 }
 
 func parseToolCall(content string) *OpenAIToolCall {
-	lines := strings.Split(strings.TrimSpace(content), "\n")
+	lines := strings.SplitN(strings.TrimSpace(content), "\n", 2)
 	if len(lines) == 0 {
 		return nil
 	}
@@ -91,7 +91,12 @@ func parseToolCall(content string) *OpenAIToolCall {
 		return nil
 	}
 
-	args := parseArguments(lines[1:])
+	var argsContent string
+	if len(lines) > 1 {
+		argsContent = lines[1]
+	}
+
+	args := parseArguments(argsContent)
 
 	return &OpenAIToolCall{
 		ID:   fmt.Sprintf("call_%d", time.Now().UnixNano()),
@@ -103,26 +108,25 @@ func parseToolCall(content string) *OpenAIToolCall {
 	}
 }
 
-func parseArguments(lines []string) string {
+func parseArguments(content string) string {
 	args := make(map[string]any)
-	var currentKey string
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	keyMatches := argKeyPattern.FindAllStringSubmatchIndex(content, -1)
+	valueMatches := argValuePattern.FindAllStringSubmatchIndex(content, -1)
 
-		if match := argKeyPattern.FindStringSubmatch(line); match != nil {
-			currentKey = match[1]
-		} else if match := argValuePattern.FindStringSubmatch(line); match != nil && currentKey != "" {
-			value := match[1]
+	if len(keyMatches) == 0 || len(keyMatches) != len(valueMatches) {
+		return "{}"
+	}
 
-			var parsed any
-			if err := json.Unmarshal([]byte(value), &parsed); err == nil {
-				args[currentKey] = parsed
-			} else {
-				args[currentKey] = value
-			}
+	for i := 0; i < len(keyMatches); i++ {
+		key := content[keyMatches[i][2]:keyMatches[i][3]]
+		value := content[valueMatches[i][2]:valueMatches[i][3]]
 
-			currentKey = ""
+		var parsed any
+		if err := json.Unmarshal([]byte(value), &parsed); err == nil {
+			args[key] = parsed
+		} else {
+			args[key] = value
 		}
 	}
 
