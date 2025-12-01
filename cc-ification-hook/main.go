@@ -66,6 +66,8 @@ func main() {
 		backendModel = getInput("Backend Model (optional, uses original if empty): ", false)
 	}
 
+	InitInterceptor()
+
 	fmt.Println()
 	fmt.Println("🚀 CC-ification Hook")
 	fmt.Printf("   Local:   http://localhost:%d\n", serverPort)

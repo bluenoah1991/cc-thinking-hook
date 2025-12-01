@@ -30,6 +30,7 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 		ThinkingStarted: false,
 		ThinkingIndex:   -1,
 		ToolCalls:       make(map[int]*ToolCallState),
+		Interceptor:     CreateStreamInterceptor(),
 	}
 
 	recorder := newStreamRecorder()
@@ -126,6 +127,10 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 }
 
 func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, delta *OpenAIDelta) {
+	if state.Interceptor != nil {
+		state.Interceptor.OnDeltaStart(delta)
+	}
+
 	reasoning := extractStreamReasoning(delta)
 	if reasoning != "" {
 		handleThinkingDelta(w, flusher, state, reasoning)

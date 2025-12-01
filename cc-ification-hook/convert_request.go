@@ -81,6 +81,10 @@ func convertMessages(req *AnthropicRequest) ([]OpenAIMessage, error) {
 }
 
 func convertMessage(msg AnthropicMessage, injectPrompt bool) ([]OpenAIMessage, error) {
+	if interceptor != nil {
+		interceptor.OnMessage(&msg)
+	}
+
 	switch msg.Role {
 	case "user":
 		return convertUserMessage(msg, injectPrompt)

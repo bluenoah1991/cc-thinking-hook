@@ -142,6 +142,7 @@ type StreamState struct {
 	ToolCalls        map[int]*ToolCallState
 	AccumulatedUsage *OpenAIUsage
 	Finalized        bool
+	Interceptor      Interceptor
 }
 
 type ToolCallState struct {
