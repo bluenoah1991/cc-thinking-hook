@@ -15,7 +15,7 @@ func saveDiagnosticRequest(anthropicBody []byte, openaiReq *OpenAIRequest) {
 	}
 
 	if err := os.MkdirAll("diagnostic", 0755); err != nil {
-		fmt.Printf("[✗] Failed to create diagnostic directory: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to create diagnostic directory: %v", err))
 		return
 	}
 
@@ -23,34 +23,34 @@ func saveDiagnosticRequest(anthropicBody []byte, openaiReq *OpenAIRequest) {
 
 	var anthropicReq interface{}
 	if err := json.Unmarshal(anthropicBody, &anthropicReq); err != nil {
-		fmt.Printf("[✗] Failed to unmarshal anthropic request: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to unmarshal anthropic request: %v", err))
 		return
 	}
 
 	anthropicReqBody, err := json.MarshalIndent(anthropicReq, "", "  ")
 	if err != nil {
-		fmt.Printf("[✗] Failed to marshal anthropic request: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to marshal anthropic request: %v", err))
 		return
 	}
 
 	anthropicFile := filepath.Join("diagnostic", fmt.Sprintf("anthropic_%s.json", timestamp))
 	if err := os.WriteFile(anthropicFile, anthropicReqBody, 0644); err != nil {
-		fmt.Printf("[✗] Failed to save anthropic request: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to save anthropic request: %v", err))
 	} else {
-		fmt.Printf("[📋] Saved anthropic request: %s\n", anthropicFile)
+		addLog(fmt.Sprintf("[📋] Saved anthropic request: %s", anthropicFile))
 	}
 
 	openaiBody, err := json.MarshalIndent(openaiReq, "", "  ")
 	if err != nil {
-		fmt.Printf("[✗] Failed to marshal openai request: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to marshal openai request: %v", err))
 		return
 	}
 
 	openaiFile := filepath.Join("diagnostic", fmt.Sprintf("openai_%s.json", timestamp))
 	if err := os.WriteFile(openaiFile, openaiBody, 0644); err != nil {
-		fmt.Printf("[✗] Failed to save openai request: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to save openai request: %v", err))
 	} else {
-		fmt.Printf("[📋] Saved openai request: %s\n", openaiFile)
+		addLog(fmt.Sprintf("[📋] Saved openai request: %s", openaiFile))
 	}
 }
 
@@ -66,7 +66,7 @@ func newStreamRecorder() *StreamRecorder {
 	}
 
 	if err := os.MkdirAll("diagnostic", 0755); err != nil {
-		fmt.Printf("[✗] Failed to create diagnostic directory: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to create diagnostic directory: %v", err))
 		return nil
 	}
 
@@ -75,11 +75,11 @@ func newStreamRecorder() *StreamRecorder {
 
 	file, err := os.Create(filename)
 	if err != nil {
-		fmt.Printf("[✗] Failed to create stream file: %v\n", err)
+		addLog(fmt.Sprintf("[✗] Failed to create stream file: %v", err))
 		return nil
 	}
 
-	fmt.Printf("[📋] Recording stream to: %s\n", filename)
+	addLog(fmt.Sprintf("[📋] Recording stream to: %s", filename))
 	return &StreamRecorder{
 		file:      file,
 		timestamp: timestamp,
@@ -102,5 +102,5 @@ func (r *StreamRecorder) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.file.Close()
-	fmt.Printf("[📋] Stream recording completed: %s\n", r.timestamp)
+	addLog(fmt.Sprintf("[📋] Stream recording completed: %s", r.timestamp))
 }

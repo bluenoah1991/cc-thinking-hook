@@ -2,8 +2,10 @@
   "name": "cc-thinking-hook",
   "scripts": {
     "build:windows": "go mod tidy && go build -o cc-thinking-hook.exe main.go",
+    "build:windows:gui": "go mod tidy && go build -ldflags=\"-H windowsgui\" -o cc-thinking-hook.exe main.go",
     "build:unix": "go mod tidy && go build -o cc-thinking-hook main.go",
     "build:ifi:windows": "cd cc-ification-hook && go build -o ../cc-ification-hook.exe",
+    "build:ifi:windows:gui": "cd cc-ification-hook && go build -ldflags=\"-H windowsgui\" -o ../cc-ification-hook.exe",
     "build:ifi:unix": "cd cc-ification-hook && go build -o ../cc-ification-hook-bin",
     "start": "go run main.go",
     "start:py": "python3 cc-thinking-hook.py"

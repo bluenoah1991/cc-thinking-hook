@@ -63,7 +63,7 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
-				fmt.Printf("[✗] Stream read error: %v\n", err)
+				addLog(fmt.Sprintf("[✗] Stream read error: %v", err))
 			}
 			break
 		}
@@ -293,7 +293,7 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 	}
 
 	if diagnosticMode {
-		fmt.Printf("[✓] Output tokens: %d (scale: %.2f)\n", outputTokens, tokenScaleFactor)
+		addLog(fmt.Sprintf("[✓] Output tokens: %d (scale: %.2f)", outputTokens, tokenScaleFactor))
 	}
 
 	sendEvent(w, "message_delta", map[string]any{

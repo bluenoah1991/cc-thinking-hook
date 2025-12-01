@@ -292,6 +292,37 @@ func convertToolChoice(tc *AnthropicToolChoice) any {
 	return "auto"
 }
 
+func shouldInjectUltrathink(req *AnthropicRequest) bool {
+	if ultrathinkPrompt == "" {
+		return false
+	}
+	if req.Thinking == nil || req.Thinking.BudgetTokens == 0 {
+		return false
+	}
+	if len(req.Messages) == 0 {
+		return false
+	}
+	return req.Messages[len(req.Messages)-1].Role == "user"
+}
+
+func budgetToEffort(budgetTokens int) string {
+	if budgetTokens < 4000 {
+		return "low"
+	}
+	if budgetTokens >= 32000 {
+		return "high"
+	}
+	return "medium"
+}
+
+func printInjectionLog(userContent string) {
+	preview := userContent
+	if len(preview) > 20 {
+		preview = preview[:20] + "..."
+	}
+	addLog(fmt.Sprintf("[✓] Injected prompt: %s", preview))
+}
+
 func extractSystemContent(system any) string {
 	switch v := system.(type) {
 	case string:
@@ -342,37 +373,6 @@ func contentPartsToAny(parts []OpenAIContentPart) any {
 		result[i] = p
 	}
 	return result
-}
-
-func shouldInjectUltrathink(req *AnthropicRequest) bool {
-	if ultrathinkPrompt == "" {
-		return false
-	}
-	if req.Thinking == nil || req.Thinking.BudgetTokens == 0 {
-		return false
-	}
-	if len(req.Messages) == 0 {
-		return false
-	}
-	return req.Messages[len(req.Messages)-1].Role == "user"
-}
-
-func budgetToEffort(budgetTokens int) string {
-	if budgetTokens < 4000 {
-		return "low"
-	}
-	if budgetTokens >= 32000 {
-		return "high"
-	}
-	return "medium"
-}
-
-func printInjectionLog(userContent string) {
-	preview := userContent
-	if len(preview) > 20 {
-		preview = preview[:20] + "..."
-	}
-	fmt.Printf("[✓] Injected prompt: %s\n", preview)
 }
 
 func removeUriFormat(schema any) any {

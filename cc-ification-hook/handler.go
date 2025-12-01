@@ -2,11 +2,23 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 )
+
+//go:embed index.html
+var indexHTML []byte
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(indexHTML)
+}
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -101,6 +113,41 @@ func countTokensHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	logsMu.Lock()
+	logsCopy := make([]string, len(logs))
+	copy(logsCopy, logs)
+	logsMu.Unlock()
+
+	tokenCount := "estimate"
+	if anthropicURL != "" {
+		tokenCount = "proxy"
+	}
+
+	data := map[string]any{
+		"local":      fmt.Sprintf("http://localhost:%d", serverPort),
+		"backend":    backendURL,
+		"diagnostic": diagnosticMode,
+		"ultrathink": ultrathinkPrompt != "",
+		"tokencount": tokenCount,
+		"logs":       logsCopy,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		os.Exit(0)
+	}()
 }
 
 func proxyCountTokens(w http.ResponseWriter, body []byte) {

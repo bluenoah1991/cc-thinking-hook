@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Claude UltraThink Proxy</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 24px;
+            line-height: 1.5;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 8px;
+        }
+
+        .config {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .config div {
+            padding: 4px 0;
+        }
+
+        .config span {
+            color: #58a6ff;
+        }
+
+        .logs {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            height: 360px;
+            overflow-y: auto;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .shutdown {
+            background: #21262d;
+            color: #f85149;
+            border: 1px solid #f85149;
+            border-radius: 6px;
+            padding: 5px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 16px;
+        }
+
+        .shutdown:hover {
+            background: #f85149;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Claude UltraThink Proxy</h1>
+    <div class="config">
+        <div>Local: <span id="local"></span></div>
+        <div>Backend: <span id="backend"></span></div>
+        <div>Diagnostic: <span id="diagnostic"></span></div>
+        <div>UltraThink: <span id="ultrathink"></span></div>
+    </div>
+    <div class="logs" id="logs"></div>
+    <button class="shutdown" onclick="shutdown()">Shutdown</button>
+    <script>
+        function loadStatus() {
+            fetch('/status').then(r => r.json()).then(data => {
+                document.getElementById('local').textContent = data.local;
+                document.getElementById('backend').textContent = data.backend;
+                document.getElementById('diagnostic').textContent = data.diagnostic ? 'enabled' : 'disabled';
+                document.getElementById('ultrathink').textContent = data.ultrathink ? 'enabled' : 'disabled';
+                document.getElementById('logs').innerHTML = data.logs.map(l => '<div class="log-entry">' + l + '</div>').join('');
+            });
+        }
+        function shutdown() { if (confirm('Shutdown?')) fetch('/shutdown', { method: 'POST' }); }
+        loadStatus();
+        setInterval(loadStatus, 2000);
+    </script>
+</body>
+
+</html>

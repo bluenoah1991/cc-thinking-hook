@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	_ "embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -11,43 +13,171 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
+//go:embed index.html
+var indexHTML []byte
+
 var (
 	backendURL       string
 	ultrathinkPrompt string
 	diagnosticMode   bool
+	serverPort       int
+	logs             []string
+	logsMu           sync.Mutex
 )
 
-func logMessage(status int) {
-	if status >= 400 {
-		fmt.Printf("[✗] HTTP %d\n", status)
+func main() {
+	diagnostic := flag.Bool("diagnostic", false, "Enable diagnostic mode")
+	flag.BoolVar(diagnostic, "d", false, "Enable diagnostic mode")
+	port := flag.Int("port", 5280, "Port to run the proxy on")
+	flag.IntVar(port, "p", 5280, "Port to run the proxy on")
+	urlFlag := flag.String("url", "", "Backend API URL")
+	flag.StringVar(urlFlag, "u", "", "Backend API URL")
+	flag.Parse()
+
+	diagnosticMode = *diagnostic
+	serverPort = *port
+	if *urlFlag != "" {
+		backendURL = strings.TrimRight(*urlFlag, "/")
+	} else {
+		backendURL = getBackendURL()
+	}
+
+	data, err := os.ReadFile("ultrathink.txt")
+	if err != nil {
+		fmt.Println("[✗] Could not load ultrathink.txt")
+	} else {
+		ultrathinkPrompt = string(data)
+	}
+
+	fmt.Println()
+	fmt.Println("🚀 Claude UltraThink Proxy")
+	fmt.Printf("   Local:   http://localhost:%d\n", serverPort)
+	fmt.Printf("   Backend: %s\n", backendURL)
+	if diagnosticMode {
+		fmt.Println("   📋 Diagnostic: enabled (saving to 'diagnostic/' directory)")
+	}
+	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", serverPort)
+	fmt.Println("\n   Press Ctrl+C to stop")
+	fmt.Println()
+
+	http.HandleFunc("/", proxyHandler)
+	http.HandleFunc("/status", statusHandler)
+	http.HandleFunc("/shutdown", shutdownHandler)
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", serverPort), nil); err != nil {
+		fmt.Printf("Server error: %v\n", err)
 	}
 }
 
-func saveDiagnosticRequest(data []byte) {
-	if !diagnosticMode {
+func getBackendURL() string {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("Backend API URL: ")
+		url, _ := reader.ReadString('\n')
+		url = strings.TrimSpace(url)
+		if url != "" {
+			return strings.TrimRight(url, "/")
+		}
+		fmt.Println("[✗] Backend URL cannot be empty.")
+	}
+}
+
+func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(indexHTML)
 		return
 	}
 
-	if err := os.MkdirAll("diagnostic", 0755); err != nil {
-		fmt.Printf("[✗] Failed to save diagnostic: %v\n", err)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	filename := fmt.Sprintf("request_%s.json", time.Now().Format("20060102_150405_000"))
-	filepath := filepath.Join("diagnostic", filename)
-
-	if err := os.WriteFile(filepath, data, 0644); err != nil {
-		fmt.Printf("[✗] Failed to save diagnostic: %v\n", err)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, err)
 		return
 	}
 
-	fmt.Printf("[📋] Diagnostic saved: %s\n", filename)
+	modified, injected := injectUltrathink(body)
+	if injected {
+		saveDiagnosticRequest(modified)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, backendURL, bytes.NewReader(modified))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	for h, v := range r.Header {
+		lower := strings.ToLower(h)
+		if lower != "host" && lower != "content-length" {
+			req.Header[h] = v
+		}
+	}
+	req.Header.Set("Content-Length", fmt.Sprintf("%d", len(modified)))
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{},
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	logMessage(resp.StatusCode)
+
+	for h, v := range resp.Header {
+		lower := strings.ToLower(h)
+		if lower != "connection" && lower != "transfer-encoding" {
+			w.Header()[h] = v
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	logsMu.Lock()
+	logsCopy := make([]string, len(logs))
+	copy(logsCopy, logs)
+	logsMu.Unlock()
+
+	data := map[string]any{
+		"local":      fmt.Sprintf("http://localhost:%d", serverPort),
+		"backend":    backendURL,
+		"diagnostic": diagnosticMode,
+		"ultrathink": ultrathinkPrompt != "",
+		"logs":       logsCopy,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		os.Exit(0)
+	}()
 }
 
 func injectUltrathink(body []byte) ([]byte, bool) {
@@ -115,122 +245,49 @@ func injectUltrathink(body []byte) ([]byte, bool) {
 		return body, false
 	}
 
-	fmt.Printf("[✓] Injected prompt: %s\n", preview)
+	addLog(fmt.Sprintf("[✓] Injected prompt: %s", preview))
 	return modified, true
 }
 
-func proxyHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func saveDiagnosticRequest(data []byte) {
+	if !diagnosticMode {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, err)
+	if err := os.MkdirAll("diagnostic", 0755); err != nil {
+		addLog(fmt.Sprintf("[✗] Failed to save diagnostic: %v", err))
 		return
 	}
 
-	modified, injected := injectUltrathink(body)
-	if injected {
-		saveDiagnosticRequest(modified)
-	}
+	filename := fmt.Sprintf("request_%s.json", time.Now().Format("20060102_150405_000"))
+	filepath := filepath.Join("diagnostic", filename)
 
-	req, err := http.NewRequest(http.MethodPost, backendURL, bytes.NewReader(modified))
-	if err != nil {
-		writeError(w, err)
+	if err := os.WriteFile(filepath, data, 0644); err != nil {
+		addLog(fmt.Sprintf("[✗] Failed to save diagnostic: %v", err))
 		return
 	}
 
-	for h, v := range r.Header {
-		lower := strings.ToLower(h)
-		if lower != "host" && lower != "content-length" {
-			req.Header[h] = v
-		}
+	addLog(fmt.Sprintf("[📋] Diagnostic saved: %s", filename))
+}
+
+func addLog(msg string) {
+	logsMu.Lock()
+	defer logsMu.Unlock()
+	logs = append(logs, time.Now().Format("15:04:05")+" "+msg)
+	if len(logs) > 100 {
+		logs = logs[1:]
 	}
-	req.Header.Set("Content-Length", fmt.Sprintf("%d", len(modified)))
+	fmt.Println(msg)
+}
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{},
-		},
+func logMessage(status int) {
+	if status >= 400 {
+		addLog(fmt.Sprintf("[✗] HTTP %d", status))
 	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	logMessage(resp.StatusCode)
-
-	for h, v := range resp.Header {
-		lower := strings.ToLower(h)
-		if lower != "connection" && lower != "transfer-encoding" {
-			w.Header()[h] = v
-		}
-	}
-
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
 }
 
 func writeError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintf(w, `{"error":"%s"}`, err.Error())
-}
-
-func getBackendURL() string {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("Backend API URL: ")
-		url, _ := reader.ReadString('\n')
-		url = strings.TrimSpace(url)
-		if url != "" {
-			return strings.TrimRight(url, "/")
-		}
-		fmt.Println("[✗] Backend URL cannot be empty.")
-	}
-}
-
-func main() {
-	diagnostic := flag.Bool("diagnostic", false, "Enable diagnostic mode")
-	flag.BoolVar(diagnostic, "d", false, "Enable diagnostic mode")
-	port := flag.Int("port", 5280, "Port to run the proxy on")
-	flag.IntVar(port, "p", 5280, "Port to run the proxy on")
-	urlFlag := flag.String("url", "", "Backend API URL")
-	flag.StringVar(urlFlag, "u", "", "Backend API URL")
-	flag.Parse()
-
-	diagnosticMode = *diagnostic
-	if *urlFlag != "" {
-		backendURL = strings.TrimRight(*urlFlag, "/")
-	} else {
-		backendURL = getBackendURL()
-	}
-
-	data, err := os.ReadFile("ultrathink.txt")
-	if err != nil {
-		fmt.Println("[✗] Could not load ultrathink.txt")
-	} else {
-		ultrathinkPrompt = string(data)
-	}
-
-	fmt.Println()
-	fmt.Println("🚀 Claude UltraThink Proxy")
-	fmt.Printf("   Local:   http://localhost:%d\n", *port)
-	fmt.Printf("   Backend: %s\n", backendURL)
-	if diagnosticMode {
-		fmt.Println("   📋 Diagnostic: enabled (saving to 'diagnostic/' directory)")
-	}
-	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", *port)
-	fmt.Println("\n   Press Ctrl+C to stop")
-	fmt.Println()
-
-	http.HandleFunc("/", proxyHandler)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
-		fmt.Printf("Server error: %v\n", err)
-	}
 }

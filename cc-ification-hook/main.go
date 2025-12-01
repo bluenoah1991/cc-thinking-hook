@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
 
 var (
@@ -20,6 +22,9 @@ var (
 	anthropicAPIKey  string
 	anthropicModel   string
 	tokenScaleFactor float64
+	serverPort       int
+	logs             []string
+	logsMu           sync.Mutex
 )
 
 func main() {
@@ -39,6 +44,7 @@ func main() {
 
 	diagnosticMode = *diagnostic
 	tokenScaleFactor = *scaleFlag
+	serverPort = *port
 
 	loadUltrathinkPrompt()
 	loadAnthropicConfig()
@@ -62,7 +68,7 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("🚀 CC-ification Hook")
-	fmt.Printf("   Local:   http://localhost:%d\n", *port)
+	fmt.Printf("   Local:   http://localhost:%d\n", serverPort)
 	fmt.Printf("   Backend: %s\n", backendURL)
 	if diagnosticMode {
 		fmt.Println("   📋 Diagnostic: enabled")
@@ -75,15 +81,17 @@ func main() {
 	} else {
 		fmt.Println("   📊 TokenCount: estimate")
 	}
-	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", *port)
+	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", serverPort)
 	fmt.Println("\n   Press Ctrl+C to stop")
 	fmt.Println()
 
-	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/v1/messages", proxyHandler)
 	http.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
+	http.HandleFunc("/status", statusHandler)
+	http.HandleFunc("/shutdown", shutdownHandler)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", serverPort), nil); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 	}
 }
@@ -134,8 +142,12 @@ func getInput(prompt string, required bool) string {
 	}
 }
 
-func handleRoot(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok","service":"cc-ification-hook"}`))
+func addLog(msg string) {
+	logsMu.Lock()
+	defer logsMu.Unlock()
+	logs = append(logs, time.Now().Format("15:04:05")+" "+msg)
+	if len(logs) > 100 {
+		logs = logs[1:]
+	}
+	fmt.Println(msg)
 }
