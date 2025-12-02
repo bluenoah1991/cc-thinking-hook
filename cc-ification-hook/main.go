@@ -23,6 +23,7 @@ var (
 	anthropicModel   string
 	tokenScaleFactor float64
 	serverPort       int
+	keepRounds       int
 	logs             []string
 	logsMu           sync.Mutex
 )
@@ -40,11 +41,14 @@ func main() {
 	flag.StringVar(modelFlag, "m", "", "Backend Model (optional)")
 	scaleFlag := flag.Float64("scale", 1.0, "Token scale factor")
 	flag.Float64Var(scaleFlag, "s", 1.0, "Token scale factor")
+	roundFlag := flag.Int("round", 0, "Keep recent N rounds uncompressed")
+	flag.IntVar(roundFlag, "r", 0, "Keep recent N rounds uncompressed")
 	flag.Parse()
 
 	diagnosticMode = *diagnostic
 	tokenScaleFactor = *scaleFlag
 	serverPort = *port
+	keepRounds = *roundFlag
 
 	loadUltrathinkPrompt()
 	loadAnthropicConfig()
@@ -82,6 +86,9 @@ func main() {
 		fmt.Println("   📊 TokenCount: proxy")
 	} else {
 		fmt.Println("   📊 TokenCount: estimate")
+	}
+	if keepRounds > 0 {
+		fmt.Printf("   📦 Compress: keep %d rounds\n", keepRounds)
 	}
 	fmt.Printf("\n   export ANTHROPIC_BASE_URL=http://localhost:%d\n", serverPort)
 	fmt.Println("\n   Press Ctrl+C to stop")
