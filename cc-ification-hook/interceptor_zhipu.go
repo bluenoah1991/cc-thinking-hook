@@ -10,8 +10,7 @@ import (
 
 var (
 	toolCallPattern = regexp.MustCompile(`<tool_call>([\s\S]*?)</tool_call>`)
-	argKeyPattern   = regexp.MustCompile(`<arg_key>([\s\S]*?)</arg_key>`)
-	argValuePattern = regexp.MustCompile(`<arg_value>([\s\S]*?)</arg_value>`)
+	argPairPattern  = regexp.MustCompile(`(?s)<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>`)
 )
 
 type ZhipuInterceptorFactory struct{}
@@ -111,16 +110,15 @@ func parseToolCall(content string) *OpenAIToolCall {
 func parseArguments(content string) string {
 	args := make(map[string]any)
 
-	keyMatches := argKeyPattern.FindAllStringSubmatchIndex(content, -1)
-	valueMatches := argValuePattern.FindAllStringSubmatchIndex(content, -1)
+	matches := argPairPattern.FindAllStringSubmatch(content, -1)
 
-	if len(keyMatches) == 0 || len(keyMatches) != len(valueMatches) {
-		return "{}"
-	}
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
 
-	for i := 0; i < len(keyMatches); i++ {
-		key := content[keyMatches[i][2]:keyMatches[i][3]]
-		value := content[valueMatches[i][2]:valueMatches[i][3]]
+		key := strings.TrimSpace(match[1])
+		value := strings.TrimSpace(match[2])
 
 		var parsed any
 		if err := json.Unmarshal([]byte(value), &parsed); err == nil {
