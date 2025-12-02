@@ -132,6 +132,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		"diagnostic": diagnosticMode,
 		"ultrathink": ultrathinkPrompt != "",
 		"tokencount": tokenCount,
+		"keeprounds": keepRounds,
 		"logs":       logsCopy,
 	}
 	w.Header().Set("Content-Type", "application/json")
