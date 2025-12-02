@@ -35,11 +35,16 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, error) {
 		openaiReq.ReasoningEffort = budgetToEffort(req.Thinking.BudgetTokens)
 	}
 
-	messages, err := convertMessages(req)
+	var stats CompressionStats
+	messages, err := convertMessages(req, &stats)
 	if err != nil {
 		return nil, err
 	}
 	openaiReq.Messages = messages
+
+	if stats.ThinkingBlocks > 0 || stats.ToolCalls > 0 || stats.ToolResults > 0 {
+		addLog(fmt.Sprintf("[Compress] %d thinking, %d tool_use, %d tool_result", stats.ThinkingBlocks, stats.ToolCalls, stats.ToolResults))
+	}
 
 	if len(req.Tools) > 0 {
 		openaiReq.Tools = convertTools(req.Tools)
@@ -52,7 +57,7 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, error) {
 	return openaiReq, nil
 }
 
-func convertMessages(req *AnthropicRequest) ([]OpenAIMessage, error) {
+func convertMessages(req *AnthropicRequest, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	if req.System != nil {
@@ -72,7 +77,7 @@ func convertMessages(req *AnthropicRequest) ([]OpenAIMessage, error) {
 	for i, msg := range req.Messages {
 		injectPrompt := injectUltrathink && i == lastIdx
 		compress := keepRounds > 0 && i < compressBoundary
-		converted, err := convertMessage(msg, injectPrompt, compress)
+		converted, err := convertMessage(msg, injectPrompt, compress, stats)
 		if err != nil {
 			return nil, err
 		}
@@ -113,21 +118,21 @@ func hasToolResult(msg AnthropicMessage) bool {
 	return false
 }
 
-func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool) ([]OpenAIMessage, error) {
+func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	if interceptor != nil {
 		interceptor.OnMessage(&msg)
 	}
 
 	switch msg.Role {
 	case "user":
-		return convertUserMessage(msg, injectPrompt, compress)
+		return convertUserMessage(msg, injectPrompt, compress, stats)
 	case "assistant":
-		return convertAssistantMessage(msg, compress)
+		return convertAssistantMessage(msg, compress, stats)
 	}
 	return nil, nil
 }
 
-func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool) ([]OpenAIMessage, error) {
+func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	content, ok := msg.Content.([]any)
@@ -184,7 +189,9 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool) 
 			}
 			seenToolResults[toolUseID] = true
 			resultContent := "[compressed]"
-			if !compress {
+			if compress {
+				stats.ToolResults++
+			} else {
 				resultContent = extractToolResultContent(blockMap["content"])
 			}
 			toolResults = append(toolResults, OpenAIMessage{
@@ -223,7 +230,7 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool) 
 	return messages, nil
 }
 
-func convertAssistantMessage(msg AnthropicMessage, compress bool) ([]OpenAIMessage, error) {
+func convertAssistantMessage(msg AnthropicMessage, compress bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	content, ok := msg.Content.([]any)
@@ -252,7 +259,9 @@ func convertAssistantMessage(msg AnthropicMessage, compress bool) ([]OpenAIMessa
 
 		switch blockType {
 		case "thinking":
-			if !compress {
+			if compress {
+				stats.ThinkingBlocks++
+			} else {
 				thinking, _ := blockMap["thinking"].(string)
 				thinkingParts = append(thinkingParts, thinking)
 			}
@@ -267,7 +276,9 @@ func convertAssistantMessage(msg AnthropicMessage, compress bool) ([]OpenAIMessa
 			seenToolUse[id] = true
 			name, _ := blockMap["name"].(string)
 			args := `{"compressed":true}`
-			if !compress {
+			if compress {
+				stats.ToolCalls++
+			} else {
 				input := blockMap["input"]
 				inputJSON, _ := json.Marshal(input)
 				args = string(inputJSON)

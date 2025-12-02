@@ -156,3 +156,9 @@ type ToolCallState struct {
 type CountTokensResponse struct {
 	InputTokens int `json:"input_tokens"`
 }
+
+type CompressionStats struct {
+	ThinkingBlocks int
+	ToolCalls      int
+	ToolResults    int
+}
