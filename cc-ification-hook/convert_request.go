@@ -90,7 +90,7 @@ func getCompressBoundary(messages []AnthropicMessage) int {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" && !hasToolResult(messages[i]) {
 			rounds++
-			if rounds > keepRounds {
+			if rounds >= keepRounds {
 				return i
 			}
 		}
@@ -266,15 +266,18 @@ func convertAssistantMessage(msg AnthropicMessage, compress bool) ([]OpenAIMessa
 			}
 			seenToolUse[id] = true
 			name, _ := blockMap["name"].(string)
-			input := blockMap["input"]
-			inputJSON, _ := json.Marshal(input)
-
+			args := `{"compressed":true}`
+			if !compress {
+				input := blockMap["input"]
+				inputJSON, _ := json.Marshal(input)
+				args = string(inputJSON)
+			}
 			toolCalls = append(toolCalls, OpenAIToolCall{
 				ID:   id,
 				Type: "function",
 				Function: ToolCallFunction{
 					Name:      name,
-					Arguments: string(inputJSON),
+					Arguments: args,
 				},
 			})
 		}
