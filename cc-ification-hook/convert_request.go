@@ -37,7 +37,7 @@ func preprocessAnthropicRequest(req *AnthropicRequest, useMultimodal bool) *Anth
 		if multimodalMaxTokens > 0 && preprocessedReq.MaxTokens > multimodalMaxTokens {
 			preprocessedReq.MaxTokens = multimodalMaxTokens
 		}
-		addLog("[Anthropic] Image in last message, using multimodal API")
+		addLog("[Multimodal] Image in last message, using multimodal API")
 	}
 
 	rounds := keepRounds
