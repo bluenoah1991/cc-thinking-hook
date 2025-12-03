@@ -18,3 +18,4 @@ cc-ification-hook.exe
 
 # Config files with sensitive data
 anthropic.json
+multimodal.json

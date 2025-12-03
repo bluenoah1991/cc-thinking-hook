@@ -86,6 +86,7 @@
         <div>Diagnostic: <span id="diagnostic"></span></div>
         <div>UltraThink: <span id="ultrathink"></span></div>
         <div>TokenCount: <span id="tokencount"></span></div>
+        <div>Multimodal: <span id="multimodal"></span></div>
         <div>Compress: <span id="keeprounds"></span></div>
     </div>
     <div class="logs" id="logs"></div>
@@ -98,6 +99,7 @@
                 document.getElementById('diagnostic').textContent = data.diagnostic ? 'enabled' : 'disabled';
                 document.getElementById('ultrathink').textContent = data.ultrathink ? 'enabled' : 'disabled';
                 document.getElementById('tokencount').textContent = data.tokencount;
+                document.getElementById('multimodal').textContent = data.multimodal ? 'enabled' : 'disabled';
                 document.getElementById('keeprounds').textContent = data.keeprounds > 0 ? 'keep ' + data.keeprounds + ' rounds' : 'disabled';
                 document.getElementById('logs').innerHTML = data.logs.map(l => '<div class="log-entry">' + l + '</div>').join('');
             });

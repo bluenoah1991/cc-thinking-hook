@@ -40,7 +40,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	originalModel := anthropicReq.Model
 
-	openaiReq, err := convertAnthropicToOpenAI(&anthropicReq)
+	openaiReq, useMultimodal, err := convertAnthropicToOpenAI(&anthropicReq)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -54,7 +54,12 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodPost, backendURL+"/chat/completions", bytes.NewReader(openaiBody))
+	targetURL := backendURL
+	if useMultimodal {
+		targetURL = multimodalURL
+	}
+
+	req, err := http.NewRequest(http.MethodPost, targetURL+"/chat/completions", bytes.NewReader(openaiBody))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -62,7 +67,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	apiKey := resolveAPIKey(r)
+	apiKey := resolveAPIKey(r, useMultimodal)
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
@@ -132,6 +137,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		"diagnostic": diagnosticMode,
 		"ultrathink": ultrathinkPrompt != "",
 		"tokencount": tokenCount,
+		"multimodal": multimodalURL != "",
 		"keeprounds": keepRounds,
 		"logs":       logsCopy,
 	}
@@ -195,7 +201,10 @@ func proxyCountTokens(w http.ResponseWriter, body []byte) {
 	w.Write(respBody)
 }
 
-func resolveAPIKey(r *http.Request) string {
+func resolveAPIKey(r *http.Request, useMultimodal bool) string {
+	if useMultimodal {
+		return multimodalAPIKey
+	}
 	if backendAPIKey != "" {
 		return backendAPIKey
 	}

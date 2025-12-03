@@ -13,19 +13,24 @@ import (
 )
 
 var (
-	backendURL       string
-	backendAPIKey    string
-	backendModel     string
-	diagnosticMode   bool
-	ultrathinkPrompt string
-	anthropicURL     string
-	anthropicAPIKey  string
-	anthropicModel   string
-	tokenScaleFactor float64
-	serverPort       int
-	keepRounds       int
-	logs             []string
-	logsMu           sync.Mutex
+	backendURL          string
+	backendAPIKey       string
+	backendModel        string
+	diagnosticMode      bool
+	ultrathinkPrompt    string
+	anthropicURL        string
+	anthropicAPIKey     string
+	anthropicModel      string
+	multimodalURL       string
+	multimodalAPIKey    string
+	multimodalModel     string
+	multimodalMaxRounds int
+	multimodalMaxTokens int
+	tokenScaleFactor    float64
+	serverPort          int
+	keepRounds          int
+	logs                []string
+	logsMu              sync.Mutex
 )
 
 func main() {
@@ -52,6 +57,7 @@ func main() {
 
 	loadUltrathinkPrompt()
 	loadAnthropicConfig()
+	loadMultimodalConfig()
 
 	if *urlFlag != "" {
 		backendURL = strings.TrimRight(*urlFlag, "/")
@@ -86,6 +92,9 @@ func main() {
 		fmt.Println("   📊 TokenCount: proxy")
 	} else {
 		fmt.Println("   📊 TokenCount: estimate")
+	}
+	if multimodalURL != "" {
+		fmt.Println("   👁️ Multimodal: enabled")
 	}
 	if keepRounds > 0 {
 		fmt.Printf("   📦 Compress: keep %d rounds\n", keepRounds)
@@ -135,6 +144,37 @@ func loadAnthropicConfig() {
 		anthropicAPIKey = config.APIKey
 		anthropicModel = config.Model
 		fmt.Println("[✓] Loaded anthropic.json")
+	}
+}
+
+func loadMultimodalConfig() {
+	data, err := os.ReadFile("multimodal.json")
+	if err != nil {
+		return
+	}
+	var config struct {
+		URL       string `json:"url"`
+		APIKey    string `json:"api_key"`
+		Model     string `json:"model"`
+		MaxRounds int    `json:"max_rounds"`
+		MaxTokens int    `json:"max_tokens"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return
+	}
+	if config.URL != "" && config.APIKey != "" && config.Model != "" {
+		multimodalURL = strings.TrimRight(config.URL, "/")
+		multimodalAPIKey = config.APIKey
+		multimodalModel = config.Model
+		multimodalMaxRounds = config.MaxRounds
+		if multimodalMaxRounds <= 0 {
+			multimodalMaxRounds = 3
+		}
+		multimodalMaxTokens = config.MaxTokens
+		if multimodalMaxTokens <= 0 {
+			multimodalMaxTokens = 4096
+		}
+		fmt.Println("[✓] Loaded multimodal.json")
 	}
 }
 

@@ -6,14 +6,21 @@ import (
 	"strings"
 )
 
-func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, error) {
+func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, bool, error) {
 	openaiReq := &OpenAIRequest{
 		Model:     req.Model,
 		MaxTokens: req.MaxTokens,
 		Stream:    req.Stream,
 	}
 
-	if backendModel != "" {
+	useMultimodal := lastMessageHasImage(req) && multimodalURL != ""
+	if useMultimodal {
+		openaiReq.Model = multimodalModel
+		if multimodalMaxTokens > 0 && openaiReq.MaxTokens > multimodalMaxTokens {
+			openaiReq.MaxTokens = multimodalMaxTokens
+		}
+		addLog("[Multimodal] Image in last message, using multimodal API")
+	} else if backendModel != "" {
 		openaiReq.Model = backendModel
 	}
 
@@ -36,9 +43,9 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, error) {
 	}
 
 	var stats CompressionStats
-	messages, err := convertMessages(req, &stats)
+	messages, err := convertMessages(req, useMultimodal, &stats)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	openaiReq.Messages = messages
 
@@ -54,10 +61,10 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, error) {
 		openaiReq.ToolChoice = convertToolChoice(req.ToolChoice)
 	}
 
-	return openaiReq, nil
+	return openaiReq, useMultimodal, nil
 }
 
-func convertMessages(req *AnthropicRequest, stats *CompressionStats) ([]OpenAIMessage, error) {
+func convertMessages(req *AnthropicRequest, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	if req.System != nil {
@@ -72,12 +79,23 @@ func convertMessages(req *AnthropicRequest, stats *CompressionStats) ([]OpenAIMe
 
 	injectUltrathink := shouldInjectUltrathink(req)
 	lastIdx := len(req.Messages) - 1
-	compressBoundary := getCompressBoundary(req.Messages)
+	rounds := keepRounds
+	if useMultimodal {
+		rounds = 1
+	}
+	compressBoundary := getCompressBoundary(req.Messages, rounds)
 
-	for i, msg := range req.Messages {
+	startIdx := 0
+	if useMultimodal && multimodalMaxRounds > 0 {
+		startIdx = getTrimBoundary(req.Messages, multimodalMaxRounds)
+	}
+
+	for i := startIdx; i <= lastIdx; i++ {
+		msg := req.Messages[i]
 		injectPrompt := injectUltrathink && i == lastIdx
-		compress := keepRounds > 0 && i < compressBoundary
-		converted, err := convertMessage(msg, injectPrompt, compress, stats)
+		compress := rounds > 0 && i < compressBoundary
+		isLast := i == lastIdx
+		converted, err := convertMessage(msg, injectPrompt, compress, isLast, useMultimodal, stats)
 		if err != nil {
 			return nil, err
 		}
@@ -87,20 +105,60 @@ func convertMessages(req *AnthropicRequest, stats *CompressionStats) ([]OpenAIMe
 	return messages, nil
 }
 
-func getCompressBoundary(messages []AnthropicMessage) int {
-	if keepRounds <= 0 {
+func getCompressBoundary(messages []AnthropicMessage, rounds int) int {
+	if rounds <= 0 {
 		return 0
 	}
-	rounds := 0
+	count := 0
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" && !hasToolResult(messages[i]) {
-			rounds++
-			if rounds >= keepRounds {
+			count++
+			if count >= rounds {
 				return i
 			}
 		}
 	}
 	return 0
+}
+
+func getTrimBoundary(messages []AnthropicMessage, maxRounds int) int {
+	count := 0
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" && !hasToolResult(messages[i]) {
+			count++
+			if count > maxRounds {
+				for j := i + 1; j < len(messages); j++ {
+					if messages[j].Role == "user" {
+						return j
+					}
+				}
+				return i + 1
+			}
+		}
+	}
+	return 0
+}
+
+func lastMessageHasImage(req *AnthropicRequest) bool {
+	if len(req.Messages) == 0 {
+		return false
+	}
+	return messageHasImage(req.Messages[len(req.Messages)-1])
+}
+
+func messageHasImage(msg AnthropicMessage) bool {
+	content, ok := msg.Content.([]any)
+	if !ok {
+		return false
+	}
+	for _, block := range content {
+		if blockMap, ok := block.(map[string]any); ok {
+			if blockMap["type"] == "image" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasToolResult(msg AnthropicMessage) bool {
@@ -118,21 +176,21 @@ func hasToolResult(msg AnthropicMessage) bool {
 	return false
 }
 
-func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool, stats *CompressionStats) ([]OpenAIMessage, error) {
+func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	if interceptor != nil {
 		interceptor.OnMessage(&msg)
 	}
 
 	switch msg.Role {
 	case "user":
-		return convertUserMessage(msg, injectPrompt, compress, stats)
+		return convertUserMessage(msg, injectPrompt, compress, isLast, useMultimodal, stats)
 	case "assistant":
 		return convertAssistantMessage(msg, compress, stats)
 	}
 	return nil, nil
 }
 
-func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, stats *CompressionStats) ([]OpenAIMessage, error) {
+func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	content, ok := msg.Content.([]any)
@@ -171,15 +229,22 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, 
 				Text: text,
 			})
 		case "image":
-			source, ok := blockMap["source"].(map[string]any)
-			if ok {
-				mediaType, _ := source["media_type"].(string)
-				data, _ := source["data"].(string)
+			if isLast && useMultimodal {
+				source, ok := blockMap["source"].(map[string]any)
+				if ok {
+					mediaType, _ := source["media_type"].(string)
+					data, _ := source["data"].(string)
+					contentParts = append(contentParts, OpenAIContentPart{
+						Type: "image_url",
+						ImageURL: &ImageURL{
+							URL: fmt.Sprintf("data:%s;base64,%s", mediaType, data),
+						},
+					})
+				}
+			} else {
 				contentParts = append(contentParts, OpenAIContentPart{
-					Type: "image_url",
-					ImageURL: &ImageURL{
-						URL: fmt.Sprintf("data:%s;base64,%s", mediaType, data),
-					},
+					Type: "text",
+					Text: "[image]",
 				})
 			}
 		case "tool_result":

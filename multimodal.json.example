@@ -1,0 +1,6 @@
+{
+    "url": "https://open.bigmodel.cn/api/paas/v4",
+    "api_key": "your_api_key_here",
+    "model": "glm-4.5v",
+    "max_rounds": 3
+}
