@@ -40,22 +40,27 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	originalModel := anthropicReq.Model
 
-	openaiReq, useMultimodal, err := convertAnthropicToOpenAI(&anthropicReq)
+	result, err := convertRequest(&anthropicReq)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
-	saveDiagnosticRequest(body, openaiReq)
+	saveDiagnosticRequest(body, result)
 
-	openaiBody, err := json.Marshal(openaiReq)
+	if result.IsAnthropic {
+		handleAnthropicRequest(w, result.AnthropicRequest)
+		return
+	}
+
+	openaiBody, err := json.Marshal(result.OpenAIRequest)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
 	targetURL := backendURL
-	if useMultimodal {
+	if result.UseMultimodal {
 		targetURL = multimodalURL
 	}
 
@@ -67,7 +72,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	apiKey := resolveAPIKey(r, useMultimodal)
+	apiKey := resolveAPIKey(r, result.UseMultimodal)
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
@@ -89,6 +94,42 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handleStreamingResponse(w, resp, originalModel)
+}
+
+func handleAnthropicRequest(w http.ResponseWriter, anthropicReq *AnthropicRequest) {
+	reqBody, err := json.Marshal(anthropicReq)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, multimodalURL+"/v1/messages", bytes.NewReader(reqBody))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", multimodalAPIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	for h, v := range resp.Header {
+		lower := strings.ToLower(h)
+		if lower != "connection" && lower != "transfer-encoding" {
+			w.Header()[h] = v
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func countTokensHandler(w http.ResponseWriter, r *http.Request) {

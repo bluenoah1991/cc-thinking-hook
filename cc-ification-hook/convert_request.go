@@ -6,14 +6,144 @@ import (
 	"strings"
 )
 
-func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, bool, error) {
+func convertRequest(req *AnthropicRequest) (*ConvertResult, error) {
+	useMultimodal := lastMessageHasImage(req) && multimodalURL != ""
+
+	if useMultimodal && multimodalAPIType == "anthropic" {
+		return &ConvertResult{
+			AnthropicRequest: preprocessAnthropicRequest(req, true),
+			UseMultimodal:    true,
+			IsAnthropic:      true,
+		}, nil
+	}
+
+	openaiReq, err := convertAnthropicToOpenAI(req, useMultimodal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConvertResult{
+		OpenAIRequest: openaiReq,
+		UseMultimodal: useMultimodal,
+		IsAnthropic:   false,
+	}, nil
+}
+
+func preprocessAnthropicRequest(req *AnthropicRequest, useMultimodal bool) *AnthropicRequest {
+	preprocessedReq := *req
+
+	if useMultimodal {
+		preprocessedReq.Model = multimodalModel
+		if multimodalMaxTokens > 0 && preprocessedReq.MaxTokens > multimodalMaxTokens {
+			preprocessedReq.MaxTokens = multimodalMaxTokens
+		}
+		addLog("[Anthropic] Image in last message, using multimodal API")
+	}
+
+	rounds := keepRounds
+	if useMultimodal {
+		rounds = 1
+	}
+
+	startIdx := 0
+	if useMultimodal && multimodalMaxRounds > 0 {
+		startIdx = getTrimBoundary(req.Messages, multimodalMaxRounds)
+	}
+
+	compressBoundary := getCompressBoundary(req.Messages, rounds)
+	lastIdx := len(req.Messages) - 1
+
+	var stats CompressionStats
+	var preprocessedMessages []AnthropicMessage
+	for i := startIdx; i <= lastIdx; i++ {
+		msg := req.Messages[i]
+		compress := rounds > 0 && i < compressBoundary
+		isLast := i == lastIdx
+		preprocessedMsg := preprocessAnthropicMessage(msg, compress, isLast, useMultimodal, &stats)
+		if preprocessedMsg != nil {
+			preprocessedMessages = append(preprocessedMessages, *preprocessedMsg)
+		}
+	}
+	preprocessedReq.Messages = preprocessedMessages
+
+	if stats.ThinkingBlocks > 0 || stats.ToolCalls > 0 || stats.ToolResults > 0 {
+		addLog(fmt.Sprintf("[Compress] %d thinking, %d tool_use, %d tool_result", stats.ThinkingBlocks, stats.ToolCalls, stats.ToolResults))
+	}
+
+	return &preprocessedReq
+}
+
+func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) *AnthropicMessage {
+	content, ok := msg.Content.([]any)
+	if !ok {
+		return &msg
+	}
+
+	var preprocessedContent []any
+	for _, block := range content {
+		blockMap, ok := block.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		blockType, _ := blockMap["type"].(string)
+		switch blockType {
+		case "thinking":
+			if compress {
+				stats.ThinkingBlocks++
+				continue
+			}
+			preprocessedContent = append(preprocessedContent, block)
+		case "tool_use":
+			if compress {
+				stats.ToolCalls++
+				preprocessedContent = append(preprocessedContent, map[string]any{
+					"type":  "tool_use",
+					"id":    blockMap["id"],
+					"name":  blockMap["name"],
+					"input": map[string]any{"compressed": true},
+				})
+			} else {
+				preprocessedContent = append(preprocessedContent, block)
+			}
+		case "tool_result":
+			if compress {
+				stats.ToolResults++
+				preprocessedContent = append(preprocessedContent, map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": blockMap["tool_use_id"],
+					"content":     "[compressed]",
+				})
+			} else {
+				preprocessedContent = append(preprocessedContent, block)
+			}
+		case "image":
+			if isLast && useMultimodal {
+				preprocessedContent = append(preprocessedContent, block)
+			} else {
+				preprocessedContent = append(preprocessedContent, map[string]any{
+					"type": "text",
+					"text": "[image]",
+				})
+			}
+		default:
+			preprocessedContent = append(preprocessedContent, block)
+		}
+	}
+
+	return &AnthropicMessage{
+		Role:    msg.Role,
+		Content: preprocessedContent,
+	}
+}
+
+func convertAnthropicToOpenAI(req *AnthropicRequest, useMultimodal bool) (*OpenAIRequest, error) {
 	openaiReq := &OpenAIRequest{
 		Model:     req.Model,
 		MaxTokens: req.MaxTokens,
 		Stream:    req.Stream,
 	}
 
-	useMultimodal := lastMessageHasImage(req) && multimodalURL != ""
 	if useMultimodal {
 		openaiReq.Model = multimodalModel
 		if multimodalMaxTokens > 0 && openaiReq.MaxTokens > multimodalMaxTokens {
@@ -45,7 +175,7 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, bool, erro
 	var stats CompressionStats
 	messages, err := convertMessages(req, useMultimodal, &stats)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	openaiReq.Messages = messages
 
@@ -61,7 +191,7 @@ func convertAnthropicToOpenAI(req *AnthropicRequest) (*OpenAIRequest, bool, erro
 		openaiReq.ToolChoice = convertToolChoice(req.ToolChoice)
 	}
 
-	return openaiReq, useMultimodal, nil
+	return openaiReq, nil
 }
 
 func convertMessages(req *AnthropicRequest, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
@@ -78,17 +208,18 @@ func convertMessages(req *AnthropicRequest, useMultimodal bool, stats *Compressi
 	}
 
 	injectUltrathink := shouldInjectUltrathink(req)
-	lastIdx := len(req.Messages) - 1
 	rounds := keepRounds
 	if useMultimodal {
 		rounds = 1
 	}
-	compressBoundary := getCompressBoundary(req.Messages, rounds)
 
 	startIdx := 0
 	if useMultimodal && multimodalMaxRounds > 0 {
 		startIdx = getTrimBoundary(req.Messages, multimodalMaxRounds)
 	}
+
+	compressBoundary := getCompressBoundary(req.Messages, rounds)
+	lastIdx := len(req.Messages) - 1
 
 	for i := startIdx; i <= lastIdx; i++ {
 		msg := req.Messages[i]

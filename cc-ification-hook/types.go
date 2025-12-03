@@ -162,3 +162,10 @@ type CompressionStats struct {
 	ToolCalls      int
 	ToolResults    int
 }
+
+type ConvertResult struct {
+	AnthropicRequest *AnthropicRequest
+	OpenAIRequest    *OpenAIRequest
+	UseMultimodal    bool
+	IsAnthropic      bool
+}

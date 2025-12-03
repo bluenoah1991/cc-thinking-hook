@@ -22,6 +22,7 @@ var (
 	anthropicAPIKey     string
 	anthropicModel      string
 	multimodalURL       string
+	multimodalAPIType   string
 	multimodalAPIKey    string
 	multimodalModel     string
 	multimodalMaxRounds int
@@ -154,6 +155,7 @@ func loadMultimodalConfig() {
 	}
 	var config struct {
 		URL       string `json:"url"`
+		APIType   string `json:"api_type"`
 		APIKey    string `json:"api_key"`
 		Model     string `json:"model"`
 		MaxRounds int    `json:"max_rounds"`
@@ -164,6 +166,10 @@ func loadMultimodalConfig() {
 	}
 	if config.URL != "" && config.APIKey != "" && config.Model != "" {
 		multimodalURL = strings.TrimRight(config.URL, "/")
+		multimodalAPIType = config.APIType
+		if multimodalAPIType == "" {
+			multimodalAPIType = "openai"
+		}
 		multimodalAPIKey = config.APIKey
 		multimodalModel = config.Model
 		multimodalMaxRounds = config.MaxRounds

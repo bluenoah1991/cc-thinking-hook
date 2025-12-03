@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func saveDiagnosticRequest(anthropicBody []byte, openaiReq *OpenAIRequest) {
+func saveDiagnosticRequest(anthropicBody []byte, result *ConvertResult) {
 	if !diagnosticMode {
 		return
 	}
@@ -40,17 +40,26 @@ func saveDiagnosticRequest(anthropicBody []byte, openaiReq *OpenAIRequest) {
 		addLog(fmt.Sprintf("[📋] Saved anthropic request: %s", anthropicFile))
 	}
 
-	openaiBody, err := json.MarshalIndent(openaiReq, "", "  ")
+	var preprocessedBody []byte
+	var preprocessedFile string
+
+	if result.IsAnthropic {
+		preprocessedBody, err = json.MarshalIndent(result.AnthropicRequest, "", "  ")
+		preprocessedFile = filepath.Join("diagnostic", fmt.Sprintf("anthropic_preprocessed_%s.json", timestamp))
+	} else {
+		preprocessedBody, err = json.MarshalIndent(result.OpenAIRequest, "", "  ")
+		preprocessedFile = filepath.Join("diagnostic", fmt.Sprintf("openai_%s.json", timestamp))
+	}
+
 	if err != nil {
-		addLog(fmt.Sprintf("[✗] Failed to marshal openai request: %v", err))
+		addLog(fmt.Sprintf("[✗] Failed to marshal preprocessed request: %v", err))
 		return
 	}
 
-	openaiFile := filepath.Join("diagnostic", fmt.Sprintf("openai_%s.json", timestamp))
-	if err := os.WriteFile(openaiFile, openaiBody, 0644); err != nil {
-		addLog(fmt.Sprintf("[✗] Failed to save openai request: %v", err))
+	if err := os.WriteFile(preprocessedFile, preprocessedBody, 0644); err != nil {
+		addLog(fmt.Sprintf("[✗] Failed to save preprocessed request: %v", err))
 	} else {
-		addLog(fmt.Sprintf("[📋] Saved openai request: %s", openaiFile))
+		addLog(fmt.Sprintf("[📋] Saved preprocessed request: %s", preprocessedFile))
 	}
 }
 
