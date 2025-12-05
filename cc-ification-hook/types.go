@@ -131,6 +131,46 @@ type OpenAIResponse struct {
 	Usage   *OpenAIUsage   `json:"usage,omitempty"`
 }
 
+type OpenAINonStreamMessage struct {
+	Role             string            `json:"role"`
+	Content          string            `json:"content"`
+	ToolCalls        []OpenAIToolCall  `json:"tool_calls,omitempty"`
+	Reasoning        string            `json:"reasoning,omitempty"`
+	ReasoningContent string            `json:"reasoning_content,omitempty"`
+	ReasoningDetails []ReasoningDetail `json:"reasoning_details,omitempty"`
+}
+
+type OpenAINonStreamChoice struct {
+	Index        int                    `json:"index"`
+	Message      OpenAINonStreamMessage `json:"message"`
+	FinishReason string                 `json:"finish_reason"`
+}
+
+type OpenAINonStreamResponse struct {
+	ID      string                  `json:"id"`
+	Object  string                  `json:"object"`
+	Created int64                   `json:"created"`
+	Model   string                  `json:"model"`
+	Choices []OpenAINonStreamChoice `json:"choices"`
+	Usage   *OpenAIUsage            `json:"usage,omitempty"`
+}
+
+type AnthropicUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
+type AnthropicResponse struct {
+	ID           string          `json:"id"`
+	Type         string          `json:"type"`
+	Role         string          `json:"role"`
+	Content      []any           `json:"content"`
+	Model        string          `json:"model"`
+	StopReason   string          `json:"stop_reason"`
+	StopSequence *string         `json:"stop_sequence"`
+	Usage        *AnthropicUsage `json:"usage"`
+}
+
 type StreamState struct {
 	MessageID        string
 	Model            string

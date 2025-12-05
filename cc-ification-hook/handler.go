@@ -93,7 +93,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handleStreamingResponse(w, resp, originalModel)
+	if anthropicReq.Stream {
+		handleStreamingResponse(w, resp, originalModel)
+	} else {
+		handleNonStreamingResponse(w, resp, originalModel)
+	}
 }
 
 func handleAnthropicRequest(w http.ResponseWriter, anthropicReq *AnthropicRequest) {
