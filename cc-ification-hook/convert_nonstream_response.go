@@ -108,8 +108,9 @@ func convertOpenAIToAnthropicResponse(openaiResp *OpenAINonStreamResponse, origi
 		StopReason:   stopReason,
 		StopSequence: nil,
 		Usage: &AnthropicUsage{
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
+			InputTokens:          inputTokens,
+			OutputTokens:         outputTokens,
+			CacheReadInputTokens: cachedTokens,
 		},
 	}
 }

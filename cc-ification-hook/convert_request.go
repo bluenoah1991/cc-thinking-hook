@@ -7,7 +7,7 @@ import (
 )
 
 func convertRequest(req *AnthropicRequest) (*ConvertResult, error) {
-	useMultimodal := lastMessageHasImage(req) && multimodalURL != ""
+	useMultimodal := currentRoundHasImage(req) && multimodalURL != ""
 
 	if useMultimodal && multimodalAPIType == "anthropic" {
 		return &ConvertResult{
@@ -52,14 +52,15 @@ func preprocessAnthropicRequest(req *AnthropicRequest, useMultimodal bool) *Anth
 
 	compressBoundary := getCompressBoundary(req.Messages, rounds)
 	lastIdx := len(req.Messages) - 1
+	roundStart := getLastRoundStart(req)
 
 	var stats CompressionStats
 	var preprocessedMessages []AnthropicMessage
 	for i := startIdx; i <= lastIdx; i++ {
 		msg := req.Messages[i]
 		compress := rounds > 0 && i < compressBoundary
-		isLast := i == lastIdx
-		preprocessedMsg := preprocessAnthropicMessage(msg, compress, isLast, useMultimodal, &stats)
+		isInLastRound := i >= roundStart
+		preprocessedMsg := preprocessAnthropicMessage(msg, compress, isInLastRound, useMultimodal, &stats)
 		if preprocessedMsg != nil {
 			preprocessedMessages = append(preprocessedMessages, *preprocessedMsg)
 		}
@@ -73,7 +74,7 @@ func preprocessAnthropicRequest(req *AnthropicRequest, useMultimodal bool) *Anth
 	return &preprocessedReq
 }
 
-func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) *AnthropicMessage {
+func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isInLastRound bool, useMultimodal bool, stats *CompressionStats) *AnthropicMessage {
 	content, ok := msg.Content.([]any)
 	if !ok {
 		return &msg
@@ -118,7 +119,7 @@ func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isLast bool
 				preprocessedContent = append(preprocessedContent, block)
 			}
 		case "image":
-			if isLast && useMultimodal {
+			if isInLastRound && useMultimodal {
 				preprocessedContent = append(preprocessedContent, block)
 			} else {
 				preprocessedContent = append(preprocessedContent, map[string]any{
@@ -220,13 +221,14 @@ func convertMessages(req *AnthropicRequest, useMultimodal bool, stats *Compressi
 
 	compressBoundary := getCompressBoundary(req.Messages, rounds)
 	lastIdx := len(req.Messages) - 1
+	roundStart := getLastRoundStart(req)
 
 	for i := startIdx; i <= lastIdx; i++ {
 		msg := req.Messages[i]
 		injectPrompt := injectUltrathink && i == lastIdx
 		compress := rounds > 0 && i < compressBoundary
-		isLast := i == lastIdx
-		converted, err := convertMessage(msg, injectPrompt, compress, isLast, useMultimodal, stats)
+		isInLastRound := i >= roundStart
+		converted, err := convertMessage(msg, injectPrompt, compress, isInLastRound, useMultimodal, stats)
 		if err != nil {
 			return nil, err
 		}
@@ -270,11 +272,32 @@ func getTrimBoundary(messages []AnthropicMessage, maxRounds int) int {
 	return 0
 }
 
-func lastMessageHasImage(req *AnthropicRequest) bool {
+func getLastRoundStart(req *AnthropicRequest) int {
+	if len(req.Messages) == 0 {
+		return 0
+	}
+	roundStart := 0
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "user" && !hasToolResult(req.Messages[i]) {
+			roundStart = i
+			break
+		}
+	}
+	return roundStart
+}
+
+func currentRoundHasImage(req *AnthropicRequest) bool {
 	if len(req.Messages) == 0 {
 		return false
 	}
-	return messageHasImage(req.Messages[len(req.Messages)-1])
+
+	roundStart := getLastRoundStart(req)
+	for i := roundStart; i < len(req.Messages); i++ {
+		if messageHasImage(req.Messages[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 func messageHasImage(msg AnthropicMessage) bool {
@@ -307,21 +330,21 @@ func hasToolResult(msg AnthropicMessage) bool {
 	return false
 }
 
-func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
+func convertMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isInLastRound bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	if interceptor != nil {
 		interceptor.OnMessage(&msg)
 	}
 
 	switch msg.Role {
 	case "user":
-		return convertUserMessage(msg, injectPrompt, compress, isLast, useMultimodal, stats)
+		return convertUserMessage(msg, injectPrompt, compress, isInLastRound, useMultimodal, stats)
 	case "assistant":
 		return convertAssistantMessage(msg, compress, stats)
 	}
 	return nil, nil
 }
 
-func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isLast bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
+func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, isInLastRound bool, useMultimodal bool, stats *CompressionStats) ([]OpenAIMessage, error) {
 	var messages []OpenAIMessage
 
 	content, ok := msg.Content.([]any)
@@ -360,7 +383,7 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, 
 				Text: text,
 			})
 		case "image":
-			if isLast && useMultimodal {
+			if isInLastRound && useMultimodal {
 				source, ok := blockMap["source"].(map[string]any)
 				if ok {
 					mediaType, _ := source["media_type"].(string)

@@ -323,7 +323,8 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 			"stop_sequence": nil,
 		},
 		"usage": map[string]any{
-			"output_tokens": outputTokens,
+			"output_tokens":           outputTokens,
+			"cache_read_input_tokens": cachedTokens,
 		},
 	})
 

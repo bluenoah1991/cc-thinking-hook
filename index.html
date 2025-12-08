@@ -19,15 +19,21 @@
             line-height: 1.5;
         }
 
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+
         h1 {
             font-size: 20px;
             font-weight: 600;
-            margin-bottom: 16px;
-            border-bottom: 1px solid #21262d;
-            padding-bottom: 8px;
         }
 
-        .config {
+        .panel {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 6px;
@@ -36,12 +42,39 @@
             font-size: 14px;
         }
 
-        .config div {
-            padding: 4px 0;
+        .panel-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #f0f6fc;
         }
 
-        .config span {
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            padding: 8px;
+            background: #0d1117;
+            border-radius: 4px;
+            border: 1px solid #21262d;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #8b949e;
+            margin-bottom: 4px;
+        }
+
+        .value {
+            font-size: 16px;
+            font-weight: 600;
             color: #58a6ff;
+        }
+
+        .spacer {
+            margin-bottom: 16px;
         }
 
         .logs {
@@ -49,7 +82,7 @@
             border: 1px solid #30363d;
             border-radius: 6px;
             padding: 12px;
-            height: 360px;
+            height: 300px;
             overflow-y: auto;
             font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
             font-size: 12px;
@@ -65,10 +98,9 @@
             color: #f85149;
             border: 1px solid #f85149;
             border-radius: 6px;
-            padding: 5px 16px;
+            padding: 7px 18px;
             cursor: pointer;
             font-size: 14px;
-            margin-top: 16px;
         }
 
         .shutdown:hover {
@@ -79,15 +111,35 @@
 </head>
 
 <body>
-    <h1>Claude Thinking Hook</h1>
-    <div class="config">
-        <div>Local: <span id="local"></span></div>
-        <div>Backend: <span id="backend"></span></div>
-        <div>Diagnostic: <span id="diagnostic"></span></div>
-        <div>UltraThink: <span id="ultrathink"></span></div>
+    <div class="header">
+        <h1>Claude Thinking Hook</h1>
+        <button class="shutdown" onclick="shutdown()">Shutdown</button>
+    </div>
+    <div class="panel">
+        <div class="panel-title">Configuration</div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Local</div>
+                <div class="value" id="local"></div>
+            </div>
+            <div class="card">
+                <div class="label">Backend</div>
+                <div class="value" id="backend"></div>
+            </div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Diagnostic</div>
+                <div class="value" id="diagnostic"></div>
+            </div>
+            <div class="card">
+                <div class="label">UltraThink</div>
+                <div class="value" id="ultrathink"></div>
+            </div>
+        </div>
     </div>
     <div class="logs" id="logs"></div>
-    <button class="shutdown" onclick="shutdown()">Shutdown</button>
     <script>
         function loadStatus() {
             fetch('/status').then(r => r.json()).then(data => {
