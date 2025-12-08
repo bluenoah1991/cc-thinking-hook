@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -30,6 +32,7 @@ var (
 	tokenScaleFactor      float64
 	serverPort            int
 	keepRounds            int
+	startupTime           time.Time
 	logs                  []string
 	logsMu                sync.Mutex
 	totalPromptTokens     int64
@@ -40,6 +43,8 @@ var (
 )
 
 func main() {
+	startupTime = time.Now()
+
 	diagnostic := flag.Bool("diagnostic", false, "Enable diagnostic mode")
 	flag.BoolVar(diagnostic, "d", false, "Enable diagnostic mode")
 	port := flag.Int("port", 5281, "Port to run the proxy on")
@@ -86,6 +91,7 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("🚀 CC-ification Hook")
+	fmt.Printf("   Startup Time: %s\n", startupTime.Format("2006-01-02 15:04:05"))
 	fmt.Printf("   Local:   http://localhost:%d\n", serverPort)
 	fmt.Printf("   Backend: %s\n", backendURL)
 	if diagnosticMode {
@@ -114,6 +120,16 @@ func main() {
 	http.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
 	http.HandleFunc("/status", statusHandler)
 	http.HandleFunc("/shutdown", shutdownHandler)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		fmt.Println("\nShutdown signal received...")
+		saveUsageStats()
+		os.Exit(0)
+	}()
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", serverPort), nil); err != nil {
 		fmt.Printf("Server error: %v\n", err)
@@ -187,6 +203,39 @@ func loadMultimodalConfig() {
 		}
 		fmt.Println("[✓] Loaded multimodal.json")
 	}
+}
+
+func saveUsageStats() {
+	endTime := time.Now()
+
+	statsMu.RLock()
+	promptTokens := totalPromptTokens
+	completionTokens := totalCompletionTokens
+	cachedTokens := totalCachedTokens
+	totalTokenCount := totalTokens
+	statsMu.RUnlock()
+
+	usageRecord := fmt.Sprintf("%s -> %s | Prompt: %d, Completion: %d, Cached: %d, Total: %d\n",
+		startupTime.Format("2006-01-02 15:04:05"),
+		endTime.Format("2006-01-02 15:04:05"),
+		promptTokens,
+		completionTokens,
+		cachedTokens,
+		totalTokenCount)
+
+	file, err := os.OpenFile("usage.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("Error opening usage.txt: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(usageRecord); err != nil {
+		fmt.Printf("Error writing to usage.txt: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Usage stats saved: %s", usageRecord)
 }
 
 func getInput(prompt string, required bool) string {

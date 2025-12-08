@@ -184,14 +184,15 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	statsMu.RUnlock()
 
 	data := map[string]any{
-		"local":      fmt.Sprintf("http://localhost:%d", serverPort),
-		"backend":    backendURL,
-		"diagnostic": diagnosticMode,
-		"ultrathink": ultrathinkPrompt != "",
-		"tokencount": tokenCount,
-		"multimodal": multimodalURL != "",
-		"keeprounds": keepRounds,
-		"logs":       logsCopy,
+		"local":       fmt.Sprintf("http://localhost:%d", serverPort),
+		"backend":     backendURL,
+		"diagnostic":  diagnosticMode,
+		"ultrathink":  ultrathinkPrompt != "",
+		"tokencount":  tokenCount,
+		"multimodal":  multimodalURL != "",
+		"keeprounds":  keepRounds,
+		"startupTime": startupTime.Format("2006-01-02 15:04:05"),
+		"logs":        logsCopy,
 		"stats": map[string]int64{
 			"promptTokens":     currentPromptTokens,
 			"completionTokens": currentCompletionTokens,
@@ -208,7 +209,11 @@ func shutdownHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	go saveUsageStats()
+
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Shutting down..."))
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		os.Exit(0)

@@ -122,6 +122,10 @@
         <div class="spacer"></div>
         <div class="grid-container">
             <div class="card">
+                <div class="label">Startup Time</div>
+                <div class="value" id="startupTime"></div>
+            </div>
+            <div class="card">
                 <div class="label">Diagnostic</div>
                 <div class="value" id="diagnostic"></div>
             </div>
@@ -180,6 +184,7 @@
             fetch('/status').then(r => r.json()).then(data => {
                 document.getElementById('local').textContent = data.local;
                 document.getElementById('backend').textContent = data.backend;
+                document.getElementById('startupTime').textContent = data.startupTime;
                 document.getElementById('diagnostic').textContent = data.diagnostic ? 'enabled' : 'disabled';
                 document.getElementById('ultrathink').textContent = data.ultrathink ? 'enabled' : 'disabled';
                 document.getElementById('tokencount').textContent = data.tokencount;
