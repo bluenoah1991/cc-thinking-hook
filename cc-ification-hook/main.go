@@ -13,25 +13,30 @@ import (
 )
 
 var (
-	backendURL          string
-	backendAPIKey       string
-	backendModel        string
-	diagnosticMode      bool
-	ultrathinkPrompt    string
-	anthropicURL        string
-	anthropicAPIKey     string
-	anthropicModel      string
-	multimodalURL       string
-	multimodalAPIType   string
-	multimodalAPIKey    string
-	multimodalModel     string
-	multimodalMaxRounds int
-	multimodalMaxTokens int
-	tokenScaleFactor    float64
-	serverPort          int
-	keepRounds          int
-	logs                []string
-	logsMu              sync.Mutex
+	backendURL            string
+	backendAPIKey         string
+	backendModel          string
+	diagnosticMode        bool
+	ultrathinkPrompt      string
+	anthropicURL          string
+	anthropicAPIKey       string
+	anthropicModel        string
+	multimodalURL         string
+	multimodalAPIType     string
+	multimodalAPIKey      string
+	multimodalModel       string
+	multimodalMaxRounds   int
+	multimodalMaxTokens   int
+	tokenScaleFactor      float64
+	serverPort            int
+	keepRounds            int
+	logs                  []string
+	logsMu                sync.Mutex
+	totalPromptTokens     int64
+	totalCompletionTokens int64
+	totalCachedTokens     int64
+	totalTokens           int64
+	statsMu               sync.RWMutex
 )
 
 func main() {

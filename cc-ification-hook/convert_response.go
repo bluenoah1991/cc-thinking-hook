@@ -293,9 +293,24 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 	}
 
 	outputTokens := 0
+	promptTokens := 0
+	cachedTokens := 0
+	responseTotalTokens := 0
 	if state.AccumulatedUsage != nil {
-		outputTokens = int(float64(state.AccumulatedUsage.TotalTokens) * tokenScaleFactor)
+		promptTokens = int(float64(state.AccumulatedUsage.PromptTokens) * tokenScaleFactor)
+		outputTokens = int(float64(state.AccumulatedUsage.CompletionTokens) * tokenScaleFactor)
+		responseTotalTokens = int(float64(state.AccumulatedUsage.TotalTokens) * tokenScaleFactor)
+		if state.AccumulatedUsage.PromptTokensDetails != nil {
+			cachedTokens = int(float64(state.AccumulatedUsage.PromptTokensDetails.CachedTokens) * tokenScaleFactor)
+		}
 	}
+
+	statsMu.Lock()
+	totalPromptTokens += int64(promptTokens)
+	totalCompletionTokens += int64(outputTokens)
+	totalCachedTokens += int64(cachedTokens)
+	totalTokens += int64(responseTotalTokens)
+	statsMu.Unlock()
 
 	if diagnosticMode {
 		addLog(fmt.Sprintf("[✓] Output tokens: %d (scale: %.2f)", outputTokens, tokenScaleFactor))

@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>CC-ification Hook</title>
+    <title>Claude Format Hook</title>
     <style>
         * {
             box-sizing: border-box;
@@ -27,7 +27,7 @@
             padding-bottom: 8px;
         }
 
-        .config {
+        .panel {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 6px;
@@ -36,12 +36,39 @@
             font-size: 14px;
         }
 
-        .config div {
-            padding: 4px 0;
+        .panel-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #f0f6fc;
         }
 
-        .config span {
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            padding: 8px;
+            background: #0d1117;
+            border-radius: 4px;
+            border: 1px solid #21262d;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #8b949e;
+            margin-bottom: 4px;
+        }
+
+        .value {
+            font-size: 16px;
+            font-weight: 600;
             color: #58a6ff;
+        }
+
+        .spacer {
+            margin-bottom: 16px;
         }
 
         .logs {
@@ -79,19 +106,76 @@
 </head>
 
 <body>
-    <h1>CC-ification Hook</h1>
-    <div class="config">
-        <div>Local: <span id="local"></span></div>
-        <div>Backend: <span id="backend"></span></div>
-        <div>Diagnostic: <span id="diagnostic"></span></div>
-        <div>UltraThink: <span id="ultrathink"></span></div>
-        <div>TokenCount: <span id="tokencount"></span></div>
-        <div>Multimodal: <span id="multimodal"></span></div>
-        <div>Compress: <span id="keeprounds"></span></div>
+    <h1>Claude Format Hook</h1>
+    <div class="panel">
+        <div class="panel-title">Configuration</div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Local</div>
+                <div class="value" id="local"></div>
+            </div>
+            <div class="card">
+                <div class="label">Backend</div>
+                <div class="value" id="backend"></div>
+            </div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Diagnostic</div>
+                <div class="value" id="diagnostic"></div>
+            </div>
+            <div class="card">
+                <div class="label">UltraThink</div>
+                <div class="value" id="ultrathink"></div>
+            </div>
+            <div class="card">
+                <div class="label">TokenCount</div>
+                <div class="value" id="tokencount"></div>
+            </div>
+            <div class="card">
+                <div class="label">Multimodal</div>
+                <div class="value" id="multimodal"></div>
+            </div>
+            <div class="card">
+                <div class="label">Compress</div>
+                <div class="value" id="keeprounds"></div>
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-title">Token Usage</div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Prompt Tokens</div>
+                <div class="value" id="promptTokens">0</div>
+            </div>
+            <div class="card">
+                <div class="label">Completion Tokens</div>
+                <div class="value" id="completionTokens">0</div>
+            </div>
+            <div class="card">
+                <div class="label">Cached Tokens</div>
+                <div class="value" id="cachedTokens">0</div>
+            </div>
+            <div class="card">
+                <div class="label">Total Tokens</div>
+                <div class="value" id="totalTokens">0</div>
+            </div>
+        </div>
     </div>
     <div class="logs" id="logs"></div>
     <button class="shutdown" onclick="shutdown()">Shutdown</button>
     <script>
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
         function loadStatus() {
             fetch('/status').then(r => r.json()).then(data => {
                 document.getElementById('local').textContent = data.local;
@@ -102,6 +186,13 @@
                 document.getElementById('multimodal').textContent = data.multimodal ? 'enabled' : 'disabled';
                 document.getElementById('keeprounds').textContent = data.keeprounds > 0 ? 'keep ' + data.keeprounds + ' rounds' : 'disabled';
                 document.getElementById('logs').innerHTML = data.logs.map(l => '<div class="log-entry">' + l + '</div>').join('');
+
+                if (data.stats) {
+                    document.getElementById('promptTokens').textContent = formatNumber(data.stats.promptTokens);
+                    document.getElementById('completionTokens').textContent = formatNumber(data.stats.completionTokens);
+                    document.getElementById('cachedTokens').textContent = formatNumber(data.stats.cachedTokens);
+                    document.getElementById('totalTokens').textContent = formatNumber(data.stats.totalTokens);
+                }
             });
         }
         function shutdown() { if (confirm('Shutdown?')) fetch('/shutdown', { method: 'POST' }); }

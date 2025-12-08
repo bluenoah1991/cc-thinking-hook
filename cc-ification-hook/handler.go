@@ -176,6 +176,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		tokenCount = "proxy"
 	}
 
+	statsMu.RLock()
+	currentPromptTokens := totalPromptTokens
+	currentCompletionTokens := totalCompletionTokens
+	currentCachedTokens := totalCachedTokens
+	currentTotalTokens := totalTokens
+	statsMu.RUnlock()
+
 	data := map[string]any{
 		"local":      fmt.Sprintf("http://localhost:%d", serverPort),
 		"backend":    backendURL,
@@ -185,6 +192,12 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		"multimodal": multimodalURL != "",
 		"keeprounds": keepRounds,
 		"logs":       logsCopy,
+		"stats": map[string]int64{
+			"promptTokens":     currentPromptTokens,
+			"completionTokens": currentCompletionTokens,
+			"cachedTokens":     currentCachedTokens,
+			"totalTokens":      currentTotalTokens,
+		},
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)

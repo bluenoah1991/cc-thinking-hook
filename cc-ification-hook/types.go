@@ -116,10 +116,15 @@ type OpenAIChoice struct {
 	FinishReason string       `json:"finish_reason,omitempty"`
 }
 
+type OpenAIPromptTokenDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
+}
+
 type OpenAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int                       `json:"prompt_tokens"`
+	CompletionTokens    int                       `json:"completion_tokens"`
+	TotalTokens         int                       `json:"total_tokens"`
+	PromptTokensDetails *OpenAIPromptTokenDetails `json:"prompt_tokens_details,omitempty"`
 }
 
 type OpenAIResponse struct {

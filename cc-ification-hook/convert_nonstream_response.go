@@ -81,10 +81,23 @@ func convertOpenAIToAnthropicResponse(openaiResp *OpenAINonStreamResponse, origi
 
 	inputTokens := 0
 	outputTokens := 0
+	cachedTokens := 0
+	responseTotalTokens := 0
 	if openaiResp.Usage != nil {
 		inputTokens = int(float64(openaiResp.Usage.PromptTokens) * tokenScaleFactor)
 		outputTokens = int(float64(openaiResp.Usage.CompletionTokens) * tokenScaleFactor)
+		responseTotalTokens = int(float64(openaiResp.Usage.TotalTokens) * tokenScaleFactor)
+		if openaiResp.Usage.PromptTokensDetails != nil {
+			cachedTokens = int(float64(openaiResp.Usage.PromptTokensDetails.CachedTokens) * tokenScaleFactor)
+		}
 	}
+
+	statsMu.Lock()
+	totalPromptTokens += int64(inputTokens)
+	totalCompletionTokens += int64(outputTokens)
+	totalCachedTokens += int64(cachedTokens)
+	totalTokens += int64(responseTotalTokens)
+	statsMu.Unlock()
 
 	return &AnthropicResponse{
 		ID:           messageID,
