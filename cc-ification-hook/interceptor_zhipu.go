@@ -11,6 +11,7 @@ import (
 var (
 	toolCallPattern = regexp.MustCompile(`<tool_call>([\s\S]*?)</tool_call>`)
 	argPairPattern  = regexp.MustCompile(`(?s)<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>`)
+	thinkingPattern = regexp.MustCompile(`(?s)<thinking>.*?</thinking>`)
 )
 
 type ZhipuInterceptorFactory struct{}
@@ -40,6 +41,13 @@ func (z *ZhipuInterceptor) OnMessage(msg *AnthropicMessage) {
 	for _, block := range content {
 		blockMap, ok := block.(map[string]any)
 		if !ok {
+			continue
+		}
+
+		if blockMap["type"] == "text" {
+			if text, ok := blockMap["text"].(string); ok {
+				blockMap["text"] = thinkingPattern.ReplaceAllString(text, "")
+			}
 			continue
 		}
 
