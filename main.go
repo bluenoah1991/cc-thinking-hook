@@ -217,8 +217,8 @@ func injectUltrathink(body []byte) ([]byte, bool) {
 		}
 		modified, err = sjson.SetBytes(body, contentPath, newContent)
 		text := content.String()
-		if len(text) > 20 {
-			preview = text[:20] + "..."
+		if len(text) > 100 {
+			preview = text[:100] + "..."
 		} else {
 			preview = text
 		}
@@ -231,8 +231,8 @@ func injectUltrathink(body []byte) ([]byte, bool) {
 		modified, err = sjson.SetBytes(body, contentPath+".-1", ultrathinkBlock)
 		if len(content.Array()) > 0 {
 			text := content.Array()[0].Get("text").String()
-			if len(text) > 20 {
-				preview = text[:20] + "..."
+			if len(text) > 100 {
+				preview = text[:100] + "..."
 			} else {
 				preview = text
 			}

@@ -592,8 +592,8 @@ func budgetToEffort(budgetTokens int) string {
 
 func printInjectionLog(userContent string) {
 	preview := userContent
-	if len(preview) > 20 {
-		preview = preview[:20] + "..."
+	if len(preview) > 100 {
+		preview = preview[:100] + "..."
 	}
 	addLog(fmt.Sprintf("[✓] Injected prompt: %s", preview))
 }

@@ -71,7 +71,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
         injected = False
         if isinstance(content, str):
             last_msg["content"] = [{"type": "text", "text": content}, ultrathink]
-            preview = content[:20] + "..." if len(content) > 20 else content
+            preview = content[:100] + "..." if len(content) > 100 else content
             print(f"[✓] Injected prompt: {preview}")
             injected = True
         elif isinstance(content, list):
@@ -82,7 +82,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
                 if isinstance(block, dict) and block.get("type") == "text"
             ]
             first_text = text_blocks[0] if text_blocks else ""
-            preview = first_text[:20] + "..." if len(first_text) > 20 else first_text
+            preview = first_text[:100] + "..." if len(first_text) > 100 else first_text
             print(f"[✓] Injected prompt: {preview}")
             injected = True
 
