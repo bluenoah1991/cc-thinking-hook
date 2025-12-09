@@ -32,6 +32,8 @@ func convertRequest(req *AnthropicRequest) (*ConvertResult, error) {
 func preprocessAnthropicRequest(req *AnthropicRequest, useMultimodal bool) *AnthropicRequest {
 	preprocessedReq := *req
 
+	preprocessedReq.Thinking = nil
+
 	if useMultimodal {
 		preprocessedReq.Model = multimodalModel
 		if multimodalMaxTokens > 0 && preprocessedReq.MaxTokens > multimodalMaxTokens {
@@ -90,11 +92,7 @@ func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isInLastRou
 		blockType, _ := blockMap["type"].(string)
 		switch blockType {
 		case "thinking":
-			if compress {
-				stats.ThinkingBlocks++
-				continue
-			}
-			preprocessedContent = append(preprocessedContent, block)
+			continue
 		case "tool_use":
 			if compress {
 				stats.ToolCalls++
@@ -113,7 +111,9 @@ func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isInLastRou
 				preprocessedContent = append(preprocessedContent, map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": blockMap["tool_use_id"],
-					"content":     "[compressed]",
+					"content": []any{
+						map[string]any{"type": "text", "text": "[compressed]"},
+					},
 				})
 			} else {
 				preprocessedContent = append(preprocessedContent, map[string]any{
@@ -264,12 +264,7 @@ func getTrimBoundary(messages []AnthropicMessage, maxRounds int) int {
 		if messages[i].Role == "user" && !hasToolResult(messages[i]) {
 			count++
 			if count > maxRounds {
-				for j := i + 1; j < len(messages); j++ {
-					if messages[j].Role == "user" {
-						return j
-					}
-				}
-				return i + 1
+				return i
 			}
 		}
 	}
