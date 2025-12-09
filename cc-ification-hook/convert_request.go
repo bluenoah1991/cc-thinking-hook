@@ -116,7 +116,11 @@ func preprocessAnthropicMessage(msg AnthropicMessage, compress bool, isInLastRou
 					"content":     "[compressed]",
 				})
 			} else {
-				preprocessedContent = append(preprocessedContent, block)
+				preprocessedContent = append(preprocessedContent, map[string]any{
+					"type":        "tool_result",
+					"tool_use_id": blockMap["tool_use_id"],
+					"content":     replaceToolResultImages(blockMap["content"], isInLastRound, useMultimodal),
+				})
 			}
 		case "image":
 			if isInLastRound && useMultimodal {
@@ -442,7 +446,7 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, 
 			} else {
 				toolResults = append(toolResults, OpenAIMessage{
 					Role:       "tool",
-					Content:    extractToolResultContent(blockMap["content"]),
+					Content:    extractToolResultContent(blockMap["content"], isInLastRound, useMultimodal),
 					ToolCallID: toolUseID,
 				})
 			}
@@ -647,7 +651,35 @@ func extractSystemContent(system any) string {
 	return ""
 }
 
-func extractToolResultContent(content any) any {
+func replaceToolResultImages(content any, isInLastRound bool, useMultimodal bool) any {
+	if isInLastRound && useMultimodal {
+		return content
+	}
+
+	switch v := content.(type) {
+	case []any:
+		var newContent []any
+		for _, item := range v {
+			if itemMap, ok := item.(map[string]any); ok {
+				if itemType, _ := itemMap["type"].(string); itemType == "image" {
+					newContent = append(newContent, map[string]any{
+						"type": "text",
+						"text": "[image]",
+					})
+				} else {
+					newContent = append(newContent, item)
+				}
+			} else {
+				newContent = append(newContent, item)
+			}
+		}
+		return newContent
+	default:
+		return content
+	}
+}
+
+func extractToolResultContent(content any, isInLastRound bool, useMultimodal bool) any {
 	switch v := content.(type) {
 	case string:
 		return v
@@ -671,15 +703,22 @@ func extractToolResultContent(content any) any {
 					})
 				}
 			case "image":
-				source, sourceOk := itemMap["source"].(map[string]any)
-				mediaType, mediaTypeOk := source["media_type"].(string)
-				data, dataOk := source["data"].(string)
-				if sourceOk && mediaTypeOk && dataOk {
+				if isInLastRound && useMultimodal {
+					source, sourceOk := itemMap["source"].(map[string]any)
+					mediaType, mediaTypeOk := source["media_type"].(string)
+					data, dataOk := source["data"].(string)
+					if sourceOk && mediaTypeOk && dataOk {
+						contentParts = append(contentParts, OpenAIContentPart{
+							Type: "image_url",
+							ImageURL: &ImageURL{
+								URL: fmt.Sprintf("data:%s;base64,%s", mediaType, data),
+							},
+						})
+					}
+				} else {
 					contentParts = append(contentParts, OpenAIContentPart{
-						Type: "image_url",
-						ImageURL: &ImageURL{
-							URL: fmt.Sprintf("data:%s;base64,%s", mediaType, data),
-						},
+						Type: "text",
+						Text: "[image]",
 					})
 				}
 			}
