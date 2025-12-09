@@ -310,6 +310,31 @@ func messageHasImage(msg AnthropicMessage) bool {
 			if blockMap["type"] == "image" {
 				return true
 			}
+			if blockMap["type"] == "tool_result" {
+				if toolResultHasImage(blockMap) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func toolResultHasImage(blockMap map[string]any) bool {
+	content, ok := blockMap["content"]
+	if !ok {
+		return false
+	}
+	switch v := content.(type) {
+	case []any:
+		for _, item := range v {
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if itemType, ok := itemMap["type"].(string); ok && itemType == "image" {
+				return true
+			}
 		}
 	}
 	return false
@@ -407,17 +432,20 @@ func convertUserMessage(msg AnthropicMessage, injectPrompt bool, compress bool, 
 				continue
 			}
 			seenToolResults[toolUseID] = true
-			resultContent := "[compressed]"
 			if compress {
 				stats.ToolResults++
+				toolResults = append(toolResults, OpenAIMessage{
+					Role:       "tool",
+					Content:    "[compressed]",
+					ToolCallID: toolUseID,
+				})
 			} else {
-				resultContent = extractToolResultContent(blockMap["content"])
+				toolResults = append(toolResults, OpenAIMessage{
+					Role:       "tool",
+					Content:    extractToolResultContent(blockMap["content"]),
+					ToolCallID: toolUseID,
+				})
 			}
-			toolResults = append(toolResults, OpenAIMessage{
-				Role:       "tool",
-				Content:    resultContent,
-				ToolCallID: toolUseID,
-			})
 		}
 	}
 
@@ -619,20 +647,44 @@ func extractSystemContent(system any) string {
 	return ""
 }
 
-func extractToolResultContent(content any) string {
+func extractToolResultContent(content any) any {
 	switch v := content.(type) {
 	case string:
 		return v
 	case []any:
-		var parts []string
+		var contentParts []OpenAIContentPart
 		for _, item := range v {
-			if m, ok := item.(map[string]any); ok {
-				if text, ok := m["text"].(string); ok {
-					parts = append(parts, text)
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			itemType, ok := itemMap["type"].(string)
+			if !ok {
+				continue
+			}
+			switch itemType {
+			case "text":
+				if text, ok := itemMap["text"].(string); ok {
+					contentParts = append(contentParts, OpenAIContentPart{
+						Type: "text",
+						Text: text,
+					})
+				}
+			case "image":
+				source, sourceOk := itemMap["source"].(map[string]any)
+				mediaType, mediaTypeOk := source["media_type"].(string)
+				data, dataOk := source["data"].(string)
+				if sourceOk && mediaTypeOk && dataOk {
+					contentParts = append(contentParts, OpenAIContentPart{
+						Type: "image_url",
+						ImageURL: &ImageURL{
+							URL: fmt.Sprintf("data:%s;base64,%s", mediaType, data),
+						},
+					})
 				}
 			}
 		}
-		return strings.Join(parts, "\n")
+		return contentParts
 	default:
 		data, _ := json.Marshal(v)
 		return string(data)
