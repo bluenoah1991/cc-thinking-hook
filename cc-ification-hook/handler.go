@@ -78,6 +78,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &http.Client{}
+	requestStartTime := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		writeError(w, err)
@@ -94,7 +95,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if anthropicReq.Stream {
-		handleStreamingResponse(w, resp, originalModel)
+		handleStreamingResponse(w, resp, originalModel, requestStartTime)
 	} else {
 		handleNonStreamingResponse(w, resp, originalModel)
 	}
@@ -183,6 +184,22 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	currentTotalTokens := totalTokens
 	statsMu.RUnlock()
 
+	metricsMu.RLock()
+	instantFirstTokenLatency := lastFirstTokenLatency
+	instantTokenThroughput := lastTokenThroughput
+
+	var avgFirstTokenLatency, avgTokenThroughput float64
+	if len(recentRequestMetrics) > 0 {
+		var totalFirstTokenLatency, totalTokenThroughput float64
+		for _, m := range recentRequestMetrics {
+			totalFirstTokenLatency += m.FirstTokenLatency
+			totalTokenThroughput += m.TokenThroughput
+		}
+		avgFirstTokenLatency = totalFirstTokenLatency / float64(len(recentRequestMetrics))
+		avgTokenThroughput = totalTokenThroughput / float64(len(recentRequestMetrics))
+	}
+	metricsMu.RUnlock()
+
 	data := map[string]any{
 		"local":       fmt.Sprintf("http://localhost:%d", serverPort),
 		"backend":     backendURL,
@@ -198,6 +215,12 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 			"completionTokens": currentCompletionTokens,
 			"cachedTokens":     currentCachedTokens,
 			"totalTokens":      currentTotalTokens,
+		},
+		"metrics": map[string]any{
+			"instantFirstTokenLatency": instantFirstTokenLatency,
+			"instantTokenThroughput":   instantTokenThroughput,
+			"avgFirstTokenLatency":     avgFirstTokenLatency,
+			"avgTokenThroughput":       avgTokenThroughput,
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")

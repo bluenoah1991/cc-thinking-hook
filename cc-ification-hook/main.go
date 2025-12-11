@@ -40,6 +40,10 @@ var (
 	totalCachedTokens     int64
 	totalTokens           int64
 	statsMu               sync.RWMutex
+	lastFirstTokenLatency float64
+	lastTokenThroughput   float64
+	recentRequestMetrics  []RequestMetrics
+	metricsMu             sync.RWMutex
 )
 
 func main() {

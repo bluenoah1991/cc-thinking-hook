@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, originalModel string) {
+func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, originalModel string, requestStartTime time.Time) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
@@ -31,6 +31,7 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response, origina
 		ThinkingIndex:   -1,
 		ToolCalls:       make(map[int]*ToolCallState),
 		Interceptor:     CreateStreamInterceptor(),
+		StartTime:       requestStartTime,
 	}
 
 	recorder := newStreamRecorder()
@@ -201,6 +202,10 @@ func processStreamDelta(w http.ResponseWriter, flusher http.Flusher, state *Stre
 		}
 		flusher.Flush()
 	}
+
+	if state.FirstTokenTime.IsZero() && (delta.Content != "" || reasoning != "") {
+		state.FirstTokenTime = time.Now()
+	}
 }
 
 func handleThinkingDelta(w http.ResponseWriter, flusher http.Flusher, state *StreamState, reasoning string) {
@@ -333,6 +338,8 @@ func finalizeStream(w http.ResponseWriter, flusher http.Flusher, state *StreamSt
 	})
 
 	flusher.Flush()
+
+	recordRequestMetrics(state, outputTokens)
 }
 
 func extractStreamReasoning(delta *OpenAIDelta) string {
@@ -371,4 +378,40 @@ func convertFinishReason(reason string) string {
 	default:
 		return "end_turn"
 	}
+}
+
+func recordRequestMetrics(state *StreamState, outputTokens int) {
+	var firstTokenLatency float64
+	var tokenThroughput float64
+	if !state.FirstTokenTime.IsZero() {
+		firstTokenLatency = float64(state.FirstTokenTime.Sub(state.StartTime).Milliseconds())
+
+		generationMs := time.Since(state.FirstTokenTime).Milliseconds()
+		if generationMs > 0 && outputTokens > 0 {
+			tokenThroughput = float64(outputTokens) * 1000 / float64(generationMs)
+		}
+	}
+
+	metricsMu.Lock()
+	lastFirstTokenLatency = firstTokenLatency
+	lastTokenThroughput = tokenThroughput
+
+	metric := RequestMetrics{
+		Timestamp:         time.Now(),
+		FirstTokenLatency: firstTokenLatency,
+		TokenThroughput:   tokenThroughput,
+	}
+	recentRequestMetrics = append(recentRequestMetrics, metric)
+
+	cutoff := time.Now().Add(-1 * time.Hour)
+	for i, m := range recentRequestMetrics {
+		if m.Timestamp.After(cutoff) {
+			recentRequestMetrics = recentRequestMetrics[i:]
+			break
+		}
+		if i == len(recentRequestMetrics)-1 {
+			recentRequestMetrics = recentRequestMetrics[:0]
+		}
+	}
+	metricsMu.Unlock()
 }

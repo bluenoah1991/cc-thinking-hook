@@ -176,6 +176,27 @@
             </div>
         </div>
     </div>
+    <div class="panel">
+        <div class="panel-title">Performance Metrics</div>
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Instant TTFT</div>
+                <div class="value" id="instantFirstTokenLatency">-</div>
+            </div>
+            <div class="card">
+                <div class="label">Instant TPS</div>
+                <div class="value" id="instantTokenThroughput">-</div>
+            </div>
+            <div class="card">
+                <div class="label">Avg TTFT (1h)</div>
+                <div class="value" id="avgFirstTokenLatency">-</div>
+            </div>
+            <div class="card">
+                <div class="label">Avg TPS (1h)</div>
+                <div class="value" id="avgTokenThroughput">-</div>
+            </div>
+        </div>
+    </div>
     <div class="logs" id="logs"></div>
     <script>
         function formatNumber(num) {
@@ -185,6 +206,27 @@
                 return (num / 1000).toFixed(1) + 'K';
             }
             return num.toString();
+        }
+
+        function formatTTFT(value) {
+            if (value === 0 || value === null || value === undefined) {
+                return '-';
+            }
+            if (value >= 1000) {
+                const seconds = value / 1000;
+                if (seconds >= 10) {
+                    return seconds.toFixed(1) + 's';
+                }
+                return seconds.toFixed(2) + 's';
+            }
+            return value.toFixed(0) + 'ms';
+        }
+
+        function formatTPS(value) {
+            if (value === 0 || value === null || value === undefined) {
+                return '-';
+            }
+            return value.toFixed(1) + ' tok/s';
         }
 
         function loadStatus() {
@@ -204,6 +246,13 @@
                     document.getElementById('completionTokens').textContent = formatNumber(data.stats.completionTokens);
                     document.getElementById('cachedTokens').textContent = formatNumber(data.stats.cachedTokens);
                     document.getElementById('totalTokens').textContent = formatNumber(data.stats.totalTokens);
+                }
+
+                if (data.metrics) {
+                    document.getElementById('instantFirstTokenLatency').textContent = formatTTFT(data.metrics.instantFirstTokenLatency);
+                    document.getElementById('instantTokenThroughput').textContent = formatTPS(data.metrics.instantTokenThroughput);
+                    document.getElementById('avgFirstTokenLatency').textContent = formatTTFT(data.metrics.avgFirstTokenLatency);
+                    document.getElementById('avgTokenThroughput').textContent = formatTPS(data.metrics.avgTokenThroughput);
                 }
             });
         }

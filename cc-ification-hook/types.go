@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type AnthropicMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
@@ -189,6 +191,8 @@ type StreamState struct {
 	AccumulatedUsage *OpenAIUsage
 	Finalized        bool
 	Interceptor      Interceptor
+	StartTime        time.Time
+	FirstTokenTime   time.Time
 }
 
 type ToolCallState struct {
@@ -214,4 +218,10 @@ type ConvertResult struct {
 	OpenAIRequest    *OpenAIRequest
 	UseMultimodal    bool
 	IsAnthropic      bool
+}
+
+type RequestMetrics struct {
+	Timestamp         time.Time
+	FirstTokenLatency float64
+	TokenThroughput   float64
 }
