@@ -106,10 +106,10 @@ npm run build:ifi:unix
 2. 编辑 `multimodal.json`：
    ```json
    {
-       "url": "https://openrouter.ai/api/v1",
+       "url": "https://open.bigmodel.cn/api/coding/paas/v4",
        "api_type": "openai",
        "api_key": "your_api_key_here",
-       "model": "google/gemini-2.5-flash",
+       "model": "glm-4.6v",
        "max_rounds": 3,
        "max_tokens": 4096
    }
@@ -120,7 +120,7 @@ npm run build:ifi:unix
    | `url` | 多模态 API 地址 |
    | `api_type` | API 类型，支持 `openai` 和 `anthropic` |
    | `api_key` | API 密钥 |
-   | `model` | 视觉模型名称（如 `google/gemini-2.5-flash`） |
+   | `model` | 视觉模型名称（如 `glm-4.6v`） |
    | `max_rounds` | 最大对话轮数（默认 3） |
    | `max_tokens` | 最大输出 token 数（默认 4096） |
 
