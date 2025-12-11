@@ -17,7 +17,7 @@ var (
 type ZhipuInterceptorFactory struct{}
 
 func (f *ZhipuInterceptorFactory) ShouldIntercept(backendURL string) bool {
-	return strings.Contains(backendURL, "open.bigmodel.cn")
+	return strings.Contains(backendURL, "open.bigmodel.cn") || strings.Contains(backendURL, "api.z.ai")
 }
 
 func (f *ZhipuInterceptorFactory) Create() Interceptor {
