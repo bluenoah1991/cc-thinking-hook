@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -133,6 +135,11 @@ func main() {
 		fmt.Println("\nShutdown signal received...")
 		saveUsageStats()
 		os.Exit(0)
+	}()
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		openBrowser(fmt.Sprintf("http://localhost:%d", serverPort))
 	}()
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", serverPort), nil); err != nil {
@@ -263,4 +270,21 @@ func addLog(msg string) {
 		logs = logs[1:]
 	}
 	fmt.Println(msg)
+}
+
+func openBrowser(url string) {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default:
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	exec.Command(cmd, args...).Start()
 }
