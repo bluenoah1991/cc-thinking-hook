@@ -95,9 +95,9 @@ def main():
         print(f'  set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1')
         print(f'  set API_TIMEOUT_MS=30000000')
         print(f'  set ANTHROPIC_API_KEY=')
-        print(f'  set ANTHROPIC_DEFAULT_HAIKU_MODEL=anthropic/claude-haiku-4.5')
+        print(f'  set ANTHROPIC_DEFAULT_HAIKU_MODEL=anthropic/claude-haiku-4.5:amazon-bedrock')
         print(f'  set ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic/claude-sonnet-4.6')
-        print(f'  set ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic/claude-opus-4.6')
+        print(f'  set ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic/claude-opus-4.6:google-vertex')
 
         print(f"\n{'='*64}")
         print(f"  macOS / Linux")
@@ -107,9 +107,9 @@ def main():
         print(f'  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1')
         print(f'  export API_TIMEOUT_MS=30000000')
         print(f'  export ANTHROPIC_API_KEY=')
-        print(f'  export ANTHROPIC_DEFAULT_HAIKU_MODEL=anthropic/claude-haiku-4.5')
+        print(f'  export ANTHROPIC_DEFAULT_HAIKU_MODEL=anthropic/claude-haiku-4.5:amazon-bedrock')
         print(f'  export ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic/claude-sonnet-4.6')
-        print(f'  export ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic/claude-opus-4.6')
+        print(f'  export ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic/claude-opus-4.6:google-vertex')
 
         print(f"\n  Replace sk-ss-v1-xxx with your ZenMux API Key")
         print(f"  Subscription: sk-ss-v1-xxx | Pay-as-you-go: sk-ai-v1-xxx")
